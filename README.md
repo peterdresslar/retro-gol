@@ -37,10 +37,3 @@ uv run python -m retro_gol \
 Both commands refuse an existing output or staging directory. Every run writes
 the fully resolved plan, packed trajectory arrays, SHA-256 checksums, summaries,
 and a completion marker only after validation succeeds.
-
-The first verified local results are summarized in
-[`docs/first-generation-probe-v2.md`](docs/first-generation-probe-v2.md).
-
-NumPy is the readable reference implementation. CuPy is intentionally deferred
-to a separate batched Sol benchmark so GPU startup, transfer, recurrence, and
-checkpoint costs can be measured rather than assumed away.
