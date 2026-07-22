@@ -7,3 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "numpy>=2.0,<3",
 ]
+
+[project.scripts]
+retroviewer = "retro_gol.viewer:main"
+
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"

@@ -216,6 +216,75 @@ Decision statuses:
 - **Affected configurations:** Raw shard schema, state codec, dataset builder,
   training manifests, and sensitivity analyses.
 
+## RG-VIEW-001 — Read-only trajectory and retrodiction viewer
+
+- **Status:** Provisional; review after the first learned retrodiction artifact
+- **Decision:** Provide a terminal viewer as a read-only diagnostic over one
+  selected, checksum-valid trajectory artifact. The trajectory must remain in
+  its completed run so the viewer can resolve `N`, terminal metadata, the
+  planned unit, and the artifact checksum from `plan.json`, `manifest.json`,
+  and `COMPLETE`. Startup validates only the selected artifact rather than
+  rescanning every trajectory in the run.
+
+  Forward and backward controls navigate the recorded trajectory; they do not
+  solve an inverse problem, repeat a detected cycle, or simulate beyond the
+  stored endpoint. Display generation \(g\) uses the state-table indices
+
+  \[
+  [0] + \mathtt{transition\_target\_index},
+  \]
+
+  so the final cycle-closing generation is visible even though recurrent runs
+  store each unique state only once.
+
+  Optional retrodictions use a separate NumPy `.npz` artifact with exactly
+  these arrays:
+
+  - `schema_version`: `uint32` scalar equal to 1;
+  - `source_trajectory_sha256`: Unicode scalar matching the selected raw
+    trajectory;
+  - `transition_index`: nonempty, strictly increasing `uint32` vector;
+  - `p_live`: finite `float32` array of shape `(R,N,N)` in `[0,1]`.
+
+  For row \(r\), with \(k=\mathtt{transition\_index}[r]\), define
+
+  \[
+  \mathtt{p\_live}[r,i,j]
+    = q_\theta\!\left(x_k[i,j]=1\mid x_{k+1}\right).
+  \]
+
+  Here \(x_{k+1}\) means the chronological target recorded by transition
+  \(k\), including a cycle-closing target that refers to an earlier state-table
+  row. The viewer labels this quantity `P(live)`: it is neither confidence in
+  a complete predecessor nor proof of forward validity. It never thresholds,
+  samples, or evolves a probability map. Red denotes `P(live) < 1/3`, yellow
+  denotes `1/3 <= P(live) < 2/3`, and green denotes `P(live) >= 2/3`.
+
+  When retrodictions are present, the actual source state may be overlaid as a
+  glyph without changing the probability color. Sparse `transition_index`
+  vectors are permitted. Retrodiction playback steps only through those
+  recorded indices; switching from the actual layer selects the nearest
+  available source generation, with an exact tie resolved toward the earlier
+  index, and displays the selected index explicitly. `--retro-only` requires an
+  explicit retrodiction artifact, disables that truth overlay, and locks the
+  viewer to the retrodiction layer. A terminal that cannot display the complete
+  \(N\)-by-\(N\) board at two columns per cell, the controls, or the required
+  colors is an explicit startup failure.
+- **Evidence:** The console viewer was requested for bidirectional trajectory
+  inspection, speed-controlled playback, per-cell retrodiction colors, and an
+  optional actual-history overlay. Current raw `.npz` files intentionally keep
+  scientific metadata in the run manifest, and recurrent trajectories omit a
+  duplicate closing state.
+- **Alternatives considered:** Inferring `N` from a filename or packed byte
+  width; running whole-run verification before viewing one trajectory;
+  treating marginal probabilities as a binary predecessor; or evolving them
+  through B3/S23. These would weaken provenance, make startup scale with corpus
+  size, or misrepresent the learned distribution.
+- **Likely sensitivity:** None to stored data because the viewer is read-only;
+  high to interpretation if probability alignment or overlays are mislabeled.
+- **Affected configurations:** `retroviewer`, retrodiction export artifacts,
+  diagnostic documentation, and viewer tests.
+
 ## RG-SPLIT-001 — Leakage-resistant evaluation regimes
 
 - **Status:** Accepted; split proportions remain Pending

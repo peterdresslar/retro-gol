@@ -42,3 +42,51 @@ The first fixed-workload Sol CPU calibration is documented in
 [`calibrations/README.md`](calibrations/README.md). Its submission wrapper runs
 the tests and materializes the immutable plan before calling `sbatch`; generated
 artifacts and Slurm logs remain under an explicit Sol scratch root.
+
+## Console trajectory viewer
+
+After `uv sync`, inspect one trajectory from a completed run with:
+
+```sh
+uv run retroviewer \
+  data/first-generation-probe-v2/trajectories/n010-p200000-t000.npz
+```
+
+With `.venv` activated, the equivalent command is `retroviewer TRAJECTORY.npz`.
+
+The `.npz` must remain below its run's `trajectories/` directory. The viewer
+uses the adjacent `plan.json`, `manifest.json`, and `COMPLETE` files to obtain
+`N` and terminal metadata and to verify the selected artifact before display.
+Use `--generation INTEGER` to begin at a recorded position.
+
+An explicit companion retrodiction artifact enables per-cell probability
+colors and actual-history overlays:
+
+```sh
+uv run retroviewer TRAJECTORY.npz --retrodictions RETRODICTIONS.npz
+uv run retroviewer TRAJECTORY.npz \
+  --retrodictions RETRODICTIONS.npz \
+  --retro-only
+```
+
+The companion `.npz` contract is recorded in `METHODS.md` under
+`RG-VIEW-001`. It contains `schema_version`, `source_trajectory_sha256`,
+`transition_index`, and `p_live`. The color is the marginal probability that a
+cell was alive: red is low, yellow is intermediate, and green is high. It is
+not a thresholded predecessor or a forward-validity judgment.
+
+Controls are:
+
+- `space`: start or pause;
+- `b` / `f`: play backward or forward;
+- left/right arrows or `h` / `l`: pause and step once;
+- `r`: restart the current layer;
+- `+` / `-`: change playback speed;
+- `v`: switch actual/retrodiction layers;
+- `o`: toggle the actual-history overlay;
+- `q` or Escape: exit.
+
+The viewer refuses to start if the terminal cannot fit the complete board and
+controls. Retrodiction display additionally requires terminal color support.
+For sparse retrodiction files, `v` selects the nearest available source
+generation and the header always shows the selected transition explicitly.
