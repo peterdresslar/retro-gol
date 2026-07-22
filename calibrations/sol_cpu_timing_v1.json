@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "purpose": "sol_cpu_timing_calibration",
+  "run_id": "sol-cpu-timing-v1",
+  "implementation": "numpy_reference",
+  "topology": "square_torus",
+  "rule": "B3/S23",
+  "board_sizes": [10, 32],
+  "densities": ["0.20", "0.325"],
+  "trajectories_per_stratum": 1000,
+  "max_probe_generations": 10000,
+  "seed_start": 202607230000,
+  "rng": "PCG64",
+  "state_dtype": "bool",
+  "state_order": "C",
+  "state_bit_order": "little",
+  "stopping_rule": "exact_recurrence_or_probe_generation_limit",
+  "backup_mode": "none_sol_calibration"
+}

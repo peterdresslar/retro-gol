@@ -58,6 +58,50 @@ class GenerationTests(unittest.TestCase):
             [333, 333, 332, 333, 333] * 2,
         )
 
+    def test_sol_cpu_calibration_plan_is_complete_and_disjoint(self) -> None:
+        config = load_config(Path("calibrations/sol_cpu_timing_v1.json"))
+        plan = build_plan(config)
+        self.assertEqual(plan["unit_count"], 4_000)
+        self.assertEqual(plan["run_id"], "sol-cpu-timing-v1")
+        self.assertEqual(
+            plan["resolved_config"]["max_probe_generations"],
+            10_000,
+        )
+        self.assertEqual(plan["units"][0]["seed"], 202607230000)
+        self.assertEqual(plan["units"][-1]["seed"], 202607233999)
+        self.assertEqual(len({unit["unit_id"] for unit in plan["units"]}), 4_000)
+        self.assertEqual(len({unit["seed"] for unit in plan["units"]}), 4_000)
+
+    def test_sol_cpu_calibration_requires_and_consumes_its_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            config = small_config()
+            config["purpose"] = "sol_cpu_timing_calibration"
+            config["backup_mode"] = "none_sol_calibration"
+            config_path = self.write_config(directory, config)
+
+            with self.assertRaisesRegex(ValueError, "requires --input-plan"):
+                execute("run", config_path, directory / "missing-plan-run")
+
+            plan_dir = directory / "plan"
+            execute("plan", config_path, plan_dir)
+            run_dir = directory / "run"
+            execute(
+                "run",
+                config_path,
+                run_dir,
+                plan_dir / "plan.json",
+            )
+            verify_run(run_dir)
+
+            manifest = json.loads(
+                (run_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                manifest["input_plan_sha256"],
+                manifest["plan_sha256"],
+            )
+
     def test_missing_and_unknown_config_keys_fail(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             directory = Path(temporary_directory)
@@ -71,6 +115,17 @@ class GenerationTests(unittest.TestCase):
             unexpected["automatic_fallback"] = True
             with self.assertRaisesRegex(ValueError, "automatic_fallback"):
                 load_config(self.write_config(directory, unexpected))
+
+    def test_purpose_and_backup_mode_must_match(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            config = small_config()
+            config["purpose"] = "sol_cpu_timing_calibration"
+            with self.assertRaisesRegex(
+                ValueError,
+                "expected backup_mode='none_sol_calibration'",
+            ):
+                load_config(self.write_config(directory, config))
 
     def test_density_identifier_collision_fails_before_compute(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

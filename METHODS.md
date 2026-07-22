@@ -325,6 +325,65 @@ Decision statuses:
 - **Affected configurations:** First-probe configuration, sweep plan, reference
   simulator, artifact validator, and local test report.
 
+## RG-CAL-001 — First Sol CPU fixed-workload calibration
+
+- **Status:** Provisional; review after the first Sol result and before the
+  deadline-aware wall-time tester
+- **Decision:** Run one serial NumPy CPU warmup across all four primary strata.
+  The immutable workload contains 1,000 trajectories per stratum, uses disjoint
+  PCG64 seeds, and permits at most 10,000 committed transitions per trajectory;
+  exact completion under RG-STOP-001 remains active. Request one task, one CPU,
+  4 GiB of memory, and 20 minutes on Sol's `htc` partition with the `public`
+  QoS. The submitting account, prepared absolute Python interpreter, and
+  absolute scratch root are required command arguments and have no defaults.
+
+  Tracked configuration and scheduler code live in `calibrations/`. The
+  plan, result, GNU `time -v` records, hardware context, and Slurm logs live in
+  disjoint directories below the supplied scratch root. The wrapper requires a
+  clean Git checkout, runs the focused test suite, writes the plan before
+  submission, records the Git revision and configuration checksum, and refuses
+  existing plan or run paths. It rejects inherited `SBATCH_*` settings and
+  supplies every resource choice on the `sbatch` command line. The compute job
+  requires the submission-time plan, manifest, marker, configuration, and Git
+  hashes; compares the queued Python, NumPy, and lock identity with the planning
+  environment; installs nothing; fixes NumPy and BLAS thread counts to one;
+  uses the same Python entry point as local runs; and disables scheduler
+  requeue.
+
+  This is a fixed-work calibration of a standalone interpreter/NumPy import,
+  reference checks, simulation, validation, artifact writing, full-process
+  elapsed time, CPU utilization, and peak resident memory. It does not yet
+  isolate every initialization or first-operation warm-up cost; the separate
+  import probe and the warmed full run make that limitation visible. The
+  workload is deliberately longer than RG-PROBE-001, whose complete local
+  pipeline took only 0.208 seconds. It does not implement RG-TIME-001 wall-time
+  censoring, checkpoint/restart, scheduler warning handling, safewords, private
+  backup, CPU concurrency scaling, or a GPU comparison. If Slurm terminates it
+  at the requested limit, the remaining staging directory is an explicit
+  incomplete software run, not a valid `wall_time` scientific status and not
+  completion of an RG-SCALE-001 gate.
+
+  `backup_mode` is explicitly `none_sol_calibration`. These disposable warmup
+  artifacts must not be represented as a production corpus or as durable
+  scratch-to-private backup validation. No remote transfer occurs without a
+  separately approved destination and invocation.
+- **Evidence:** The first local probe established correctness and format, but
+  was too short for cluster throughput measurement and left 19 of 20 \(N=32\)
+  trajectories active at generation 100. Sol documents `htc` as the partition
+  for jobs shorter than four hours. The initial CPU baseline avoids mixing
+  array concurrency or GPU transfer effects into the first measurement.
+- **Alternatives considered:** Timing the 40-trajectory local probe on Sol,
+  which would mostly measure startup; beginning with an array, which would mix
+  scheduling and filesystem contention into the serial baseline; or labeling a
+  scheduler kill as valid censoring before atomic checkpoint/finalization
+  exists.
+- **Likely sensitivity:** Operationally moderate. The workload controls the
+  precision and duration of the measurement but does not change the validity of
+  any completed B3/S23 transition.
+- **Affected configurations:** `calibrations/sol_cpu_timing_v1.json`, its Slurm
+  job and submission wrapper, the reference configuration validator, and the
+  first Sol timing report.
+
 ## RG-SCALE-001 — Calibration and scale authorization
 
 - **Status:** Accepted
@@ -464,8 +523,9 @@ The following are intentionally unresolved rather than silently assumed:
 - worker-to-trajectory packing and whether interrupted trajectories resume in
   the same or a later scheduler unit;
 - checkpoint/heartbeat cadence, deadline reserve, and worst-case recomputation;
-- Sol account, partition/QoS, maximum wall time, array limits, and fair-share
-  concurrency;
+- production Sol account, partition/QoS, maximum wall time, array limits, and
+  fair-share concurrency; the RG-CAL-001 warmup selection does not resolve
+  these production settings;
 - exact scratch roots and approved private Hugging Face Bucket prefix;
 - the numeric CPU-hour/GPU-hour ceiling and calendar window for the week-scale
   campaign;

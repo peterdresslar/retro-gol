@@ -37,3 +37,8 @@ uv run python -m retro_gol \
 Both commands refuse an existing output or staging directory. Every run writes
 the fully resolved plan, packed trajectory arrays, SHA-256 checksums, summaries,
 and a completion marker only after validation succeeds.
+
+The first fixed-workload Sol CPU calibration is documented in
+[`calibrations/README.md`](calibrations/README.md). Its submission wrapper runs
+the tests and materializes the immutable plan before calling `sbatch`; generated
+artifacts and Slurm logs remain under an explicit Sol scratch root.

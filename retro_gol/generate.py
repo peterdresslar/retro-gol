@@ -45,6 +45,11 @@ REQUIRED_CONFIG_KEYS = {
     "backup_mode",
 }
 
+PURPOSE_BACKUP_MODES = {
+    "first_generation_probe": "none_local_probe",
+    "sol_cpu_timing_calibration": "none_sol_calibration",
+}
+
 SOURCE_PATHS = (
     "AGENTS.md",
     "METHODS.md",
@@ -156,10 +161,11 @@ def load_config(config_path: Path) -> dict[str, object]:
             "Unsupported experiment configuration schema; "
             f"expected schema_version=1, observed={config['schema_version']!r}"
         )
-    if config["purpose"] != "first_generation_probe":
+    purpose = config["purpose"]
+    if purpose not in PURPOSE_BACKUP_MODES:
         raise ValueError(
-            "Unsupported experiment purpose; expected='first_generation_probe', "
-            f"observed={config['purpose']!r}"
+            "Unsupported experiment purpose; "
+            f"expected one of={sorted(PURPOSE_BACKUP_MODES)!r}, observed={purpose!r}"
         )
     run_id = config["run_id"]
     if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", run_id):
@@ -169,7 +175,7 @@ def load_config(config_path: Path) -> dict[str, object]:
         )
     if config["implementation"] != "numpy_reference":
         raise ValueError(
-            "The first probe requires implementation='numpy_reference'; "
+            "The reference generator requires implementation='numpy_reference'; "
             f"observed={config['implementation']!r}"
         )
 
@@ -253,14 +259,20 @@ def load_config(config_path: Path) -> dict[str, object]:
         "state_order": "C",
         "state_bit_order": "little",
         "stopping_rule": "exact_recurrence_or_probe_generation_limit",
-        "backup_mode": "none_local_probe",
     }
     for name, expected_value in expected_literals.items():
         if config[name] != expected_value:
             raise ValueError(
-                f"The first probe requires {name}={expected_value!r}; "
+                f"The reference generator requires {name}={expected_value!r}; "
                 f"observed {name}={config[name]!r}"
             )
+    expected_backup_mode = PURPOSE_BACKUP_MODES[purpose]
+    if config["backup_mode"] != expected_backup_mode:
+        raise ValueError(
+            "The experiment purpose requires an explicit matching backup mode; "
+            f"purpose={purpose!r}, expected backup_mode={expected_backup_mode!r}, "
+            f"observed backup_mode={config['backup_mode']!r}"
+        )
     return config
 
 
@@ -407,7 +419,12 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
                 "trajectory_count": 0,
                 "transition_count": 0,
                 "cell_updates": 0,
+                "sample_time_ns": 0,
+                "reference_check_ns": 0,
                 "simulation_time_ns": 0,
+                "validation_time_ns": 0,
+                "artifact_write_time_ns": 0,
+                "artifact_checksum_time_ns": 0,
                 "artifact_bytes": 0,
                 "status_counts": {},
             }
@@ -415,7 +432,14 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         stratum["trajectory_count"] += 1
         stratum["transition_count"] += result["transition_count"]
         stratum["cell_updates"] += result["cell_updates"]
+        stratum["sample_time_ns"] += result["sample_time_ns"]
+        stratum["reference_check_ns"] += result["reference_check_ns"]
         stratum["simulation_time_ns"] += result["simulation_time_ns"]
+        stratum["validation_time_ns"] += result["validation_time_ns"]
+        stratum["artifact_write_time_ns"] += result["artifact_write_time_ns"]
+        stratum["artifact_checksum_time_ns"] += result[
+            "artifact_checksum_time_ns"
+        ]
         stratum["artifact_bytes"] += result["artifact_bytes"]
         status_counts = stratum["status_counts"]
         status = result["status"]
@@ -442,7 +466,20 @@ def _summarize_results(results: list[dict[str, object]]) -> dict[str, object]:
         "trajectory_count": len(results),
         "transition_count": total_transitions,
         "cell_updates": total_cell_updates,
+        "sample_time_ns": sum(result["sample_time_ns"] for result in results),
+        "reference_check_ns": sum(
+            result["reference_check_ns"] for result in results
+        ),
         "simulation_time_ns": total_simulation_time_ns,
+        "validation_time_ns": sum(
+            result["validation_time_ns"] for result in results
+        ),
+        "artifact_write_time_ns": sum(
+            result["artifact_write_time_ns"] for result in results
+        ),
+        "artifact_checksum_time_ns": sum(
+            result["artifact_checksum_time_ns"] for result in results
+        ),
         "simulation_generations_per_second": (
             total_transitions / total_seconds if total_seconds > 0 else None
         ),
@@ -485,6 +522,37 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
         complete = json.loads(complete_path.read_text(encoding="utf-8"))
         if _sha256(manifest_path) != complete.get("manifest_sha256"):
             raise RuntimeError(f"Manifest checksum mismatch; path={manifest_path}")
+
+    resolved_config = plan.get("resolved_config")
+    if not isinstance(resolved_config, dict):
+        raise RuntimeError(
+            "Run plan resolved_config must be an object; "
+            f"observed type={type(resolved_config).__name__}, path={plan_path}"
+        )
+    input_plan_path = manifest.get("input_plan_path")
+    input_plan_sha256 = manifest.get("input_plan_sha256")
+    if resolved_config.get("purpose") == "sol_cpu_timing_calibration":
+        if (
+            not isinstance(input_plan_path, str)
+            or not Path(input_plan_path).is_absolute()
+        ):
+            raise RuntimeError(
+                "Sol calibration manifest requires an absolute input_plan_path; "
+                f"observed={input_plan_path!r}, path={manifest_path}"
+            )
+        if input_plan_sha256 != manifest.get("plan_sha256"):
+            raise RuntimeError(
+                "Sol calibration input plan checksum differs from the retained plan; "
+                f"input_plan_sha256={input_plan_sha256!r}, "
+                f"plan_sha256={manifest.get('plan_sha256')!r}, path={manifest_path}"
+            )
+    elif input_plan_path is not None or input_plan_sha256 is not None:
+        raise RuntimeError(
+            "Run manifest has unexpected input-plan provenance; "
+            f"purpose={resolved_config.get('purpose')!r}, "
+            f"input_plan_path={input_plan_path!r}, "
+            f"input_plan_sha256={input_plan_sha256!r}"
+        )
 
     source_records = manifest.get("source_snapshot")
     if not isinstance(source_records, list):
@@ -653,6 +721,8 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
             "reference_check_ns",
             "simulation_time_ns",
             "validation_time_ns",
+            "artifact_write_time_ns",
+            "artifact_checksum_time_ns",
         ):
             timing_value = result.get(timing_name)
             if not isinstance(timing_value, int) or timing_value < 0:
@@ -683,13 +753,69 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
         )
 
 
-def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]:
+def execute(
+    mode: str,
+    config_path: Path,
+    output_dir: Path,
+    input_plan_path: Path | None = None,
+) -> dict[str, object]:
     config_path = config_path.resolve()
     output_dir = output_dir.resolve()
     config = load_config(config_path)
     plan = build_plan(config)
     plan["source_config_path"] = str(config_path)
     plan["source_config_sha256"] = _sha256(config_path)
+
+    if mode == "plan" and input_plan_path is not None:
+        raise ValueError(
+            "Plan mode does not accept an input plan; "
+            f"observed input_plan_path={input_plan_path}"
+        )
+    if (
+        mode == "run"
+        and config["purpose"] != "sol_cpu_timing_calibration"
+        and input_plan_path is not None
+    ):
+        raise ValueError(
+            "This experiment purpose does not accept an input plan; "
+            f"purpose={config['purpose']!r}, input_plan_path={input_plan_path}"
+        )
+    if (
+        mode == "run"
+        and config["purpose"] == "sol_cpu_timing_calibration"
+        and input_plan_path is None
+    ):
+        raise ValueError(
+            "The Sol CPU timing calibration requires --input-plan from the "
+            "completed pre-submission plan; observed input_plan_path=None, "
+            f"run_id={config['run_id']}"
+        )
+
+    input_plan_sha256 = None
+    if input_plan_path is not None:
+        input_plan_path = input_plan_path.resolve()
+        if not input_plan_path.is_file():
+            raise FileNotFoundError(
+                "Input plan does not exist; "
+                f"expected file path={input_plan_path}, run_id={config['run_id']}"
+            )
+        try:
+            input_plan = json.loads(input_plan_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                "Input plan is not valid JSON; "
+                f"path={input_plan_path}, line={error.lineno}, "
+                f"column={error.colno}, message={error.msg}"
+            ) from error
+        if input_plan != plan:
+            expected_sha256 = hashlib.sha256(_canonical_json_bytes(plan)).hexdigest()
+            raise RuntimeError(
+                "Input plan differs from the plan resolved from this configuration; "
+                f"expected_sha256={expected_sha256}, "
+                f"observed_sha256={_sha256(input_plan_path)}, "
+                f"path={input_plan_path}, run_id={config['run_id']}"
+            )
+        input_plan_sha256 = _sha256(input_plan_path)
 
     if output_dir.exists():
         raise FileExistsError(
@@ -779,6 +905,7 @@ def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]
             temporary_artifact_path = artifact_path.with_name(
                 f".{artifact_path.name}.tmp"
             )
+            artifact_write_start_ns = time.perf_counter_ns()
             with temporary_artifact_path.open("xb") as artifact_file:
                 np.savez(
                     artifact_file,
@@ -790,6 +917,16 @@ def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]
                 artifact_file.flush()
                 os.fsync(artifact_file.fileno())
             os.replace(temporary_artifact_path, artifact_path)
+            artifact_write_time_ns = (
+                time.perf_counter_ns() - artifact_write_start_ns
+            )
+
+            artifact_checksum_start_ns = time.perf_counter_ns()
+            artifact_bytes = artifact_path.stat().st_size
+            artifact_sha256 = _sha256(artifact_path)
+            artifact_checksum_time_ns = (
+                time.perf_counter_ns() - artifact_checksum_start_ns
+            )
 
             result = {
                 **unit,
@@ -804,9 +941,11 @@ def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]
                 "reference_check_ns": reference_check_ns,
                 "simulation_time_ns": simulation_time_ns,
                 "validation_time_ns": validation_time_ns,
+                "artifact_write_time_ns": artifact_write_time_ns,
+                "artifact_checksum_time_ns": artifact_checksum_time_ns,
                 "cell_updates": trajectory["transition_count"] * unit["M"],
-                "artifact_bytes": artifact_path.stat().st_size,
-                "artifact_sha256": _sha256(artifact_path),
+                "artifact_bytes": artifact_bytes,
+                "artifact_sha256": artifact_sha256,
             }
             results.append(result)
 
@@ -826,6 +965,10 @@ def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]
             "output_dir": str(output_dir),
             "plan_sha256": _sha256(plan_path),
             "summary_sha256": _sha256(summary_path),
+            "input_plan_path": (
+                str(input_plan_path) if input_plan_path is not None else None
+            ),
+            "input_plan_sha256": input_plan_sha256,
             "environment": _environment_metadata(),
             "source_snapshot": source_snapshot,
             "expected_trajectory_count": plan["unit_count"],
@@ -871,13 +1014,19 @@ def execute(mode: str, config_path: Path, output_dir: Path) -> dict[str, object]
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Plan or run an explicit retrodictive Game-of-Life probe."
+        description="Plan or run an explicit retrodictive Game-of-Life workload."
     )
     parser.add_argument("--mode", required=True, choices=("plan", "run"))
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
+    parser.add_argument("--input-plan", type=Path)
     arguments = parser.parse_args()
-    result = execute(arguments.mode, arguments.config, arguments.output_dir)
+    result = execute(
+        arguments.mode,
+        arguments.config,
+        arguments.output_dir,
+        arguments.input_plan,
+    )
     print(json.dumps(result, sort_keys=True))
 
 
