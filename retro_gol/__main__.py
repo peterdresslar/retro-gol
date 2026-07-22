@@ -1,5 +1,5 @@
 from retro_gol.generate import main
 
 
-if __name__ == "__main__":
-    main()
+main()
+

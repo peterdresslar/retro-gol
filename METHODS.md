@@ -1,6 +1,6 @@
 # Methods and Reproduction Decision Record
 
-Last updated: 2026-07-21
+Last updated: 2026-07-22
 
 This is the living decision record required by `AGENTS.md`. It is normative for
 implementation and execution. A later decision must supersede an accepted
@@ -287,6 +287,44 @@ Decision statuses:
 - **Affected configurations:** Exhaustive enumerator, predecessor index,
   oracle fixtures, evaluation, and artifact budget.
 
+## RG-PROBE-001 — First bounded data-generation probe
+
+- **Status:** Provisional; review after the first local run and before the Sol
+  wall-time tester
+- **Decision:** The first local data-generation probe crosses all four primary
+  \((N,p)\) strata and runs ten trajectories in each stratum. Each trajectory
+  advances until RG-STOP-001 applies or 100 complete transitions have been
+  committed. Reaching 100 is recorded as `probe_generation_limit`, a censored
+  engineering-test status, and never as scientific completion. This test-only
+  limit does not supersede the wall-time production rule in RG-TIME-001.
+
+  Ten trajectories are the smallest shared block that exercises complete
+  periods of the provisional integer-population schedules in RG-INIT-002: the
+  half-cell schedule has period two and the four-to-one floor/ceiling schedule
+  has period five.
+
+  The probe uses NumPy `bool` arrays of shape \((N,N)\) as its readable CPU
+  representation and `numpy.random.PCG64` with every resolved trajectory seed
+  materialized in `plan.json`. Coordinates are `(row, column)`. Persistent and
+  recurrence states are flattened in C order and packed with little bit order;
+  unused trailing bits must be zero. A scalar reference update and the
+  vectorized NumPy update must agree bit-for-bit before probe output is trusted.
+  These probe artifacts measure the candidate representation and do not freeze
+  the production chunk format or production recurrence index.
+- **Evidence:** A 100-generation first pass across all selected options was
+  proposed. Ten trajectories per stratum remain inexpensive while testing the
+  complete fixed-population balancing cadence.
+- **Alternatives considered:** One trajectory per stratum, which does not test
+  RG-INIT-002; forcing all trajectories through exactly 100 transitions, which
+  would retain repeated attractor laps; or beginning with a GPU implementation
+  before establishing the reference result.
+- **Likely sensitivity:** None to the validity of an individual transition;
+  high to whether this small probe estimates production throughput or terminal
+  distributions. It is a correctness and format test, not a production-scale
+  estimate.
+- **Affected configurations:** First-probe configuration, sweep plan, reference
+  simulator, artifact validator, and local test report.
+
 ## RG-SCALE-001 — Calibration and scale authorization
 
 - **Status:** Accepted
@@ -322,8 +360,8 @@ Decision statuses:
 
 ## RG-STORE-001 — Scratch, private mirror, manifests, and recovery
 
-- **Status:** Accepted architecture; exact Sol paths and private remote prefix
-  are Pending
+- **Status:** Accepted architecture; automatic retry clause superseded by
+  RG-STORE-002; exact Sol paths and private remote prefix are Pending
 - **Decision:** Adapt the Hybrid Signal Lab router-experiment pattern:
 
   - separate checkout, scratch data, run, log, and cache roots;
@@ -365,6 +403,25 @@ Decision statuses:
   survival of an expensive corpus.
 - **Affected configurations:** Environment template, run layout, Slurm array,
   manifest schema, finalizer, sync filter, and restore command.
+
+## RG-STORE-002 — Backup failures remain explicit
+
+- **Status:** Accepted; supersedes only the automatic bounded-retry clause in
+  RG-STORE-001
+- **Decision:** Each backup invocation makes one explicit transfer attempt. An
+  authentication, transport, object, checksum, or verification failure is
+  recorded with its original error and exits nonzero. It is not automatically
+  retried or converted into a successful no-op. An operator may launch a new
+  backup invocation after inspecting the failure; that invocation receives a
+  new attempt record and preserves the earlier failed record.
+- **Evidence:** The project requires errors to remain visible and actionable
+  rather than being paved over by implicit recovery behavior.
+- **Alternatives considered:** Automatic bounded backoff or best-effort backup.
+  Both can obscure the first failure and make elapsed-time behavior less clear.
+- **Likely sensitivity:** None to Game-of-Life dynamics; moderate to operational
+  completion time and high to auditability.
+- **Affected configurations:** Backup command, attempt log, finalizer, and run
+  completion status.
 
 ## RG-CTRL-001 — Safeword and terminal finalization
 

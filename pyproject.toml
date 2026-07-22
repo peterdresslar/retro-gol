@@ -1,7 +1,9 @@
 [project]
 name = "retro-gol"
 version = "0.1.0"
-description = "Add your description here"
+description = "Reproducible retrodictive-learning experiments in Conway's Game of Life"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=2.0,<3",
+]
