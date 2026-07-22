@@ -43,8 +43,10 @@ the overview, follow this file and record any scientific consequence in
 - Do not provide implicit defaults for experimental or scientifically
   consequential parameters, random seeds, input datasets, output locations,
   run IDs, artifact prefixes, overwrite behavior, or backup requirements.
-  Require them in a configuration or command invocation and fail if they are
-  missing.
+  Require them in a tracked configuration and fail if they are missing. Ad hoc
+  local diagnostic tools may take explicit command-line inputs, but scheduled
+  experiments and calibrations must use the zero-argument launch contract
+  below.
 - Defaults are acceptable for inconsequential interface settings when they make
   the code easier to use. Preserve every resolved setting in the run manifest.
   For third-party estimators, record the package version and complete resolved
@@ -56,6 +58,34 @@ the overview, follow this file and record any scientific consequence in
   Overwrite and restart-from-scratch must be separate explicit operations.
 - Never emit placeholder, empty, synthetic, or default scientific results in
   response to missing input or failed computation.
+
+## Reproducible Launch Interfaces
+
+- Every scheduled experiment or calibration has one tracked, versioned parent
+  launch script with a zero-argument invocation, for example
+  `bash calibrations/submit_example.sh` or `sbatch script/example.slurm`. Do not
+  require or permit invocation-time positional arguments, flags, environment
+  variables, or shell prefixes to select consequential settings.
+- Make the parent script the visible source of every operational input: run ID,
+  experiment configuration, code and interpreter paths, Slurm account,
+  partition, QoS, nodes, tasks, CPUs, GPUs, memory, wall time, concurrency,
+  scratch, logs, outputs, control paths, overwrite/restart policy, and backup
+  mode and destination. Name a tracked configuration from the parent when
+  scientific parameters live there. Never rely on a scheduler account,
+  resource, output, or environment default.
+- A parent may derive its repository root from its own tracked location and may
+  pass resolved values internally to `sbatch` or a worker, but every such value
+  must be visibly fixed or deterministically derived in the parent. Reject
+  inherited `SBATCH_*` variables and analogous environment overrides. A worker
+  that bypasses the parent must fail rather than launch with partial settings.
+- Changing a launch setting requires a reviewed tracked edit and, after a plan
+  has been launched, a new script/configuration version and run ID. Do not use
+  an `sbatch` command-line override or an ephemeral shell assignment to revise a
+  recorded experiment. Scheduler-assigned job IDs and observed node metadata
+  are recorded outputs, not launch inputs.
+- Credentials are the sole exception to embedding values: never commit a
+  secret. The parent must still name the authentication mechanism and remote
+  destination, preflight them explicitly, and fail if either is unavailable.
 
 ## Errors and Failure Semantics
 

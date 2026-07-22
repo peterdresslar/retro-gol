@@ -1,16 +1,7 @@
 #!/bin/bash
 
-#SBATCH --job-name=retro-gol-cpu-cal
-#SBATCH --partition=htc
-#SBATCH --qos=public
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
-#SBATCH --mem=4G
-#SBATCH --time=00:20:00
-#SBATCH --open-mode=truncate
-#SBATCH --export=NONE
-#SBATCH --no-requeue
+# This worker has no resource directives. The tracked zero-argument parent
+# submit_sol_cpu_timing_v1.sh supplies every launch setting and required input.
 
 set -euo pipefail
 umask 077
@@ -20,26 +11,66 @@ fail() {
     exit 2
 }
 
-if [[ "$#" -ne 8 ]]; then
-    fail "expected eight arguments: REPO_ROOT PYTHON_PATH SCRATCH_ROOT GIT_REVISION CONFIG_SHA256 PLAN_SHA256 PLAN_MANIFEST_SHA256 PLAN_MARKER_SHA256; observed_count=$#"
+if [[ "$#" -ne 20 ]]; then
+    fail "expected twenty parent-supplied arguments; observed_count=$#. Submit only through calibrations/submit_sol_cpu_timing_v1.sh"
 fi
 
 repo_root=$1
-python_path=$2
-scratch_root=$3
-expected_revision=$4
-expected_config_sha256=$5
-expected_plan_sha256=$6
-expected_plan_manifest_sha256=$7
-expected_plan_marker_sha256=$8
-run_id=sol-cpu-timing-v1
+shift
+python_path=$1
+shift
+scratch_root=$1
+shift
+config_path=$1
+shift
+parent_source_path=$1
+shift
+worker_source_path=$1
+shift
+run_id=$1
+shift
+thread_count=$1
+shift
+expected_slurm_job_name=$1
+shift
+expected_slurm_account=$1
+shift
+expected_slurm_partition=$1
+shift
+expected_slurm_qos=$1
+shift
+expected_slurm_nodes=$1
+shift
+expected_slurm_ntasks=$1
+shift
+expected_slurm_cpus_per_task=$1
+shift
+expected_revision=$1
+shift
+expected_config_sha256=$1
+shift
+expected_plan_sha256=$1
+shift
+expected_plan_manifest_sha256=$1
+shift
+expected_plan_marker_sha256=$1
 
 [[ -n "${SLURM_JOB_ID:-}" ]] || fail "SLURM_JOB_ID is missing; this script must run under Slurm"
-[[ "${SLURM_NTASKS:-}" == 1 ]] || fail "expected SLURM_NTASKS=1; observed=${SLURM_NTASKS:-missing}"
-[[ "${SLURM_CPUS_PER_TASK:-}" == 1 ]] || fail "expected SLURM_CPUS_PER_TASK=1; observed=${SLURM_CPUS_PER_TASK:-missing}"
+[[ "${SLURM_JOB_NAME:-}" == "$expected_slurm_job_name" ]] || fail "Slurm job name differs from the parent; expected=$expected_slurm_job_name observed=${SLURM_JOB_NAME:-missing}"
+[[ "${SLURM_JOB_ACCOUNT:-}" == "$expected_slurm_account" ]] || fail "Slurm account differs from the parent; expected=$expected_slurm_account observed=${SLURM_JOB_ACCOUNT:-missing}"
+[[ "${SLURM_JOB_PARTITION:-}" == "$expected_slurm_partition" ]] || fail "Slurm partition differs from the parent; expected=$expected_slurm_partition observed=${SLURM_JOB_PARTITION:-missing}"
+[[ "${SLURM_JOB_QOS:-}" == "$expected_slurm_qos" ]] || fail "Slurm QoS differs from the parent; expected=$expected_slurm_qos observed=${SLURM_JOB_QOS:-missing}"
+[[ "${SLURM_JOB_NUM_NODES:-}" == "$expected_slurm_nodes" ]] || fail "Slurm node allocation differs from the parent; expected=$expected_slurm_nodes observed=${SLURM_JOB_NUM_NODES:-missing}"
+[[ "$expected_slurm_ntasks" == 1 ]] || fail "the current serial generator requires one Slurm task; parent requested=$expected_slurm_ntasks"
+[[ "$thread_count" == "$expected_slurm_cpus_per_task" ]] || fail "thread count must equal requested CPUs per task; thread_count=$thread_count cpus_per_task=$expected_slurm_cpus_per_task"
+[[ "${SLURM_NTASKS:-}" == "$expected_slurm_ntasks" ]] || fail "Slurm task allocation differs from the parent; expected=$expected_slurm_ntasks observed=${SLURM_NTASKS:-missing}"
+[[ "${SLURM_CPUS_PER_TASK:-}" == "$expected_slurm_cpus_per_task" ]] || fail "Slurm CPU allocation differs from the parent; expected=$expected_slurm_cpus_per_task observed=${SLURM_CPUS_PER_TASK:-missing}"
 [[ "$repo_root" == /* && -d "$repo_root" ]] || fail "REPO_ROOT must be an existing absolute directory; observed=$repo_root"
 [[ "$python_path" == /* && -x "$python_path" ]] || fail "PYTHON_PATH must be an executable absolute path; observed=$python_path"
 [[ "$scratch_root" == /* && "$scratch_root" != / ]] || fail "SCRATCH_ROOT must be an absolute path other than /; observed=$scratch_root"
+[[ "$config_path" == /* && -f "$config_path" ]] || fail "CONFIG_PATH must be an existing absolute file; observed=$config_path"
+[[ "$parent_source_path" == /* && -f "$parent_source_path" ]] || fail "PARENT_SOURCE_PATH must be an existing absolute file; observed=$parent_source_path"
+[[ "$worker_source_path" == /* && -f "$worker_source_path" ]] || fail "WORKER_SOURCE_PATH must be an existing absolute file; observed=$worker_source_path"
 
 for command_name in git hostname lscpu sha256sum scontrol srun; do
     command -v "$command_name" >/dev/null 2>&1 || \
@@ -47,16 +78,12 @@ for command_name in git hostname lscpu sha256sum scontrol srun; do
 done
 [[ -x /usr/bin/time ]] || fail "required GNU time executable is unavailable; expected=/usr/bin/time"
 
-config_path="$repo_root/calibrations/sol_cpu_timing_v1.json"
-slurm_script="$repo_root/calibrations/sol_cpu_timing_v1.slurm"
 plan_dir="$scratch_root/plans/$run_id"
 run_root="$scratch_root/runs/$run_id"
 result_dir="$run_root/result"
 result_staging_dir="$run_root/.result.staging"
 job_dir="$run_root/job"
 
-[[ -f "$config_path" ]] || fail "calibration configuration is missing; expected=$config_path"
-[[ -f "$slurm_script" ]] || fail "Slurm source is missing; expected=$slurm_script"
 [[ -f "$plan_dir/plan.json" ]] || fail "materialized plan is missing; expected=$plan_dir/plan.json"
 [[ -f "$plan_dir/manifest.json" ]] || fail "plan manifest is missing; expected=$plan_dir/manifest.json"
 [[ -f "$plan_dir/PLAN_COMPLETE" ]] || fail "plan completion marker is missing; expected=$plan_dir/PLAN_COMPLETE"
@@ -108,6 +135,11 @@ plan_revision=$("$python_path" -c \
     "$plan_dir/manifest.json")
 [[ "$plan_revision" == "$expected_revision" ]] || \
     fail "plan was built from another Git revision; expected=$expected_revision observed=$plan_revision plan=$plan_dir/manifest.json"
+plan_run_id=$("$python_path" -c \
+    'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["run_id"])' \
+    "$plan_dir/plan.json")
+[[ "$plan_run_id" == "$run_id" ]] || \
+    fail "plan run ID differs from the parent; expected=$run_id observed=$plan_run_id plan=$plan_dir/plan.json"
 "$python_path" - "$plan_dir/manifest.json" <<'PYTHON'
 import importlib.metadata
 import json
@@ -137,17 +169,11 @@ checksum_record=$(sha256sum -- "$repo_root/uv.lock")
 observed_uv_lock_sha256=${checksum_record%% *}
 [[ "$plan_uv_lock_sha256" == "$observed_uv_lock_sha256" ]] || \
     fail "uv.lock differs from the planned environment; expected_sha256=$plan_uv_lock_sha256 observed_sha256=$observed_uv_lock_sha256 path=$repo_root/uv.lock"
-plan_unit_count=$("$python_path" -c \
-    'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["unit_count"])' \
-    "$plan_dir/plan.json")
-[[ "$plan_unit_count" == 4000 ]] || \
-    fail "calibration plan has the wrong unit count; expected=4000 observed=$plan_unit_count plan=$plan_dir/plan.json"
-
-export OMP_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export VECLIB_MAXIMUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS="$thread_count"
+export OPENBLAS_NUM_THREADS="$thread_count"
+export MKL_NUM_THREADS="$thread_count"
+export VECLIB_MAXIMUM_THREADS="$thread_count"
+export NUMEXPR_NUM_THREADS="$thread_count"
 export PYTHONHASHSEED=0
 export SLURM_EXPORT_ENV=ALL
 
@@ -184,20 +210,20 @@ done
     printf 'plan_marker_sha256=%s\n' "$observed_plan_marker_sha256"
     printf 'plan_dir=%s\n' "$plan_dir"
     printf 'result_dir=%s\n' "$result_dir"
-    printf 'thread_settings=OMP_NUM_THREADS=1,OPENBLAS_NUM_THREADS=1,MKL_NUM_THREADS=1,VECLIB_MAXIMUM_THREADS=1,NUMEXPR_NUM_THREADS=1\n'
+    printf 'thread_count=%s\n' "$thread_count"
     "$python_path" --version
     "$python_path" -c \
         'import importlib.metadata; print("numpy={}".format(importlib.metadata.version("numpy")))'
     uname -a
     lscpu
     scontrol show job -dd "$SLURM_JOB_ID"
-    sha256sum -- "$config_path" "$slurm_script" "$repo_root/calibrations/submit_sol_cpu_timing_v1.sh"
+    sha256sum -- "$config_path" "$parent_source_path" "$worker_source_path"
 } > "$context_path"
 
 printf 'Measuring standalone Python and NumPy import warmup.\n'
 srun --export=ALL \
-    --ntasks=1 \
-    --cpus-per-task=1 \
+    --ntasks="$expected_slurm_ntasks" \
+    --cpus-per-task="$expected_slurm_cpus_per_task" \
     --cpu-bind=verbose,cores \
     --kill-on-bad-exit=1 \
     /usr/bin/time -v -o "$import_time_path" \
@@ -206,8 +232,8 @@ srun --export=ALL \
 printf 'Starting run_id=%s job_id=%s host=%s result=%s\n' \
     "$run_id" "$SLURM_JOB_ID" "$(hostname)" "$result_dir"
 srun --export=ALL \
-    --ntasks=1 \
-    --cpus-per-task=1 \
+    --ntasks="$expected_slurm_ntasks" \
+    --cpus-per-task="$expected_slurm_cpus_per_task" \
     --cpu-bind=verbose,cores \
     --kill-on-bad-exit=1 \
     /usr/bin/time -v -o "$time_path" \
@@ -223,8 +249,8 @@ result_plan_sha256=${checksum_record%% *}
     fail "retained run plan differs from the launched plan; expected_sha256=$expected_plan_sha256 observed_sha256=$result_plan_sha256 path=$result_dir/plan.json"
 
 srun --export=ALL \
-    --ntasks=1 \
-    --cpus-per-task=1 \
+    --ntasks="$expected_slurm_ntasks" \
+    --cpus-per-task="$expected_slurm_cpus_per_task" \
     --cpu-bind=verbose,cores \
     --kill-on-bad-exit=1 \
     /usr/bin/time -v -o "$verify_time_path" \

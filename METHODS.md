@@ -334,21 +334,24 @@ Decision statuses:
   PCG64 seeds, and permits at most 10,000 committed transitions per trajectory;
   exact completion under RG-STOP-001 remains active. Request one task, one CPU,
   4 GiB of memory, and 20 minutes on Sol's `htc` partition with the `public`
-  QoS. The submitting account, prepared absolute Python interpreter, and
-  absolute scratch root are required command arguments and have no defaults.
+  QoS under account `grp_bdaniel6`. The zero-argument parent launch script pins
+  the repository-local `.venv/bin/python` interpreter and scratch root
+  `/scratch/pdressla/retro-gol/calibrations`; invocation-time overrides are not
+  supported.
 
   Tracked configuration and scheduler code live in `calibrations/`. The
   plan, result, GNU `time -v` records, hardware context, and Slurm logs live in
   disjoint directories below the supplied scratch root. The wrapper requires a
   clean Git checkout, runs the focused test suite, writes the plan before
   submission, records the Git revision and configuration checksum, and refuses
-  existing plan or run paths. It rejects inherited `SBATCH_*` settings and
-  supplies every resource choice on the `sbatch` command line. The compute job
-  requires the submission-time plan, manifest, marker, configuration, and Git
-  hashes; compares the queued Python, NumPy, and lock identity with the planning
-  environment; installs nothing; fixes NumPy and BLAS thread counts to one;
-  uses the same Python entry point as local runs; and disables scheduler
-  requeue.
+  existing plan or run paths. It rejects arguments and inherited `SBATCH_*`
+  settings, and supplies every resource choice in its tracked internal `sbatch`
+  call. The worker has no independent resource directives and fails when the
+  parent record is absent. It requires the submission-time plan, manifest,
+  marker, configuration, and Git hashes; compares the queued Python, NumPy, and
+  lock identity with the planning environment; installs nothing; fixes NumPy
+  and BLAS thread counts to one; uses the same Python entry point as local runs;
+  and disables scheduler requeue.
 
   This is a fixed-work calibration of a standalone interpreter/NumPy import,
   reference checks, simulation, validation, artifact writing, full-process
@@ -370,8 +373,10 @@ Decision statuses:
 - **Evidence:** The first local probe established correctness and format, but
   was too short for cluster throughput measurement and left 19 of 20 \(N=32\)
   trajectories active at generation 100. Sol documents `htc` as the partition
-  for jobs shorter than four hours. The initial CPU baseline avoids mixing
-  array concurrency or GPU transfer effects into the first measurement.
+  for jobs shorter than four hours. The `myaccounts` output recorded on
+  2026-07-22 identifies `grp_bdaniel6` as the default account with `public` QoS
+  access. The initial CPU baseline avoids mixing array concurrency or GPU
+  transfer effects into the first measurement.
 - **Alternatives considered:** Timing the 40-trajectory local probe on Sol,
   which would mostly measure startup; beginning with an array, which would mix
   scheduling and filesystem contention into the serial baseline; or labeling a

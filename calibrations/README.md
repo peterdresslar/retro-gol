@@ -33,26 +33,28 @@ already present:
 uv sync --frozen
 ```
 
-The supported submission path requires three explicit values:
+The versioned parent embeds the complete launch configuration:
 
-1. the Slurm account reported by `myaccounts`;
-2. an absolute path to the prepared Python interpreter;
-3. an absolute scratch root dedicated to this calibration.
+- account `grp_bdaniel6`;
+- interpreter `.venv/bin/python` below the checkout;
+- scratch root `/scratch/pdressla/retro-gol/calibrations`;
+- `htc/public`, one node, one task, one CPU, 4 GiB, and 20 minutes;
+- run ID and workload configuration, thread limits, output paths, and
+  no-requeue/no-backup behavior.
 
-From the repository root, run:
+From the repository root, the complete invocation is:
 
 ```sh
-bash calibrations/submit_sol_cpu_timing_v1.sh \
-  grp_ACCOUNT \
-  "$(pwd -P)/.venv/bin/python" \
-  /scratch/pdressla/retro-gol/calibrations
+bash calibrations/submit_sol_cpu_timing_v1.sh
 ```
 
-Replace `grp_ACCOUNT` with the selected account. The wrapper intentionally has
-no account, interpreter, or scratch defaults. It refuses a dirty checkout and
-existing plan/run paths, runs the focused tests, materializes the 4,000-unit
-plan, rejects inherited `SBATCH_*` overrides, and pins every resource and plan
-hash when it calls `sbatch` with scratch-resident stdout and stderr paths.
+The wrapper rejects arguments, a dirty checkout, existing plan/run paths, and
+inherited `SBATCH_*` overrides. It runs the focused tests, materializes the
+4,000-unit plan, and pins every resource and plan hash when it calls `sbatch`
+with scratch-resident stdout and stderr paths. The worker has no independent
+resource directives and fails when invoked without the parent-supplied record.
+Changing a launch setting requires a tracked revision and a new run ID; do not
+append an invocation-time override.
 
 ## Scratch layout
 

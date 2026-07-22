@@ -3,36 +3,10 @@
 set -euo pipefail
 umask 077
 
-usage() {
+if [[ "$#" -ne 0 ]]; then
     printf '%s\n' \
-        "Usage: bash calibrations/submit_sol_cpu_timing_v1.sh ACCOUNT ABSOLUTE_PYTHON ABSOLUTE_SCRATCH_ROOT" \
-        "Example: bash calibrations/submit_sol_cpu_timing_v1.sh grp_ACCOUNT \"\$(pwd -P)/.venv/bin/python\" /scratch/pdressla/retro-gol/calibrations" >&2
-}
-
-if [[ "$#" -ne 3 ]]; then
-    usage
-    exit 2
-fi
-
-account=$1
-python_path=$2
-scratch_root=$3
-
-if [[ -z "$account" || "$account" == grp_ACCOUNT ]]; then
-    printf 'ERROR: ACCOUNT must be an explicit Slurm account, not an empty value or the grp_ACCOUNT placeholder; observed=%s\n' \
-        "$account" >&2
-    exit 2
-fi
-if [[ "$python_path" != /* ]]; then
-    printf 'ERROR: ABSOLUTE_PYTHON must be absolute; observed=%s\n' "$python_path" >&2
-    exit 2
-fi
-if [[ ! -x "$python_path" ]]; then
-    printf 'ERROR: ABSOLUTE_PYTHON is not executable; observed=%s\n' "$python_path" >&2
-    exit 2
-fi
-if [[ "$scratch_root" != /* || "$scratch_root" == / ]]; then
-    printf 'ERROR: ABSOLUTE_SCRATCH_ROOT must be an absolute path other than /; observed=%s\n' "$scratch_root" >&2
+        "ERROR: this versioned calibration launcher accepts no arguments; observed_count=$#" \
+        "Usage: bash calibrations/submit_sol_cpu_timing_v1.sh" >&2
     exit 2
 fi
 
@@ -51,11 +25,37 @@ done
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 repo_root=$(cd -- "$script_dir/.." && pwd -P)
+python_path="$repo_root/.venv/bin/python"
 config_path="$script_dir/sol_cpu_timing_v1.json"
-slurm_script="$script_dir/sol_cpu_timing_v1.slurm"
+parent_script="$script_dir/submit_sol_cpu_timing_v1.sh"
+worker_script="$script_dir/sol_cpu_timing_v1.slurm"
 run_id=sol-cpu-timing-v1
+scratch_root=/scratch/pdressla/retro-gol/calibrations
 
-for required_file in "$config_path" "$slurm_script"; do
+slurm_job_name=retro-gol-cpu-cal
+slurm_account=grp_bdaniel6
+slurm_partition=htc
+slurm_qos=public
+slurm_nodes=1
+slurm_ntasks=1
+slurm_cpus_per_task=1
+slurm_memory=4G
+slurm_wall_time=00:20:00
+slurm_open_mode=truncate
+slurm_export_mode=NONE
+thread_count=1
+
+if [[ ! -x "$python_path" ]]; then
+    printf 'ERROR: embedded Python interpreter is not executable; expected=%s\n' \
+        "$python_path" >&2
+    exit 2
+fi
+if [[ "$scratch_root" != /* || "$scratch_root" == / ]]; then
+    printf 'ERROR: embedded scratch root must be an absolute path other than /; observed=%s\n' \
+        "$scratch_root" >&2
+    exit 2
+fi
+for required_file in "$config_path" "$worker_script"; do
     if [[ ! -f "$required_file" ]]; then
         printf 'ERROR: required calibration file is missing; expected=%s\n' "$required_file" >&2
         exit 2
@@ -114,11 +114,11 @@ for forbidden_path in \
     fi
 done
 
-export OMP_NUM_THREADS=1
-export OPENBLAS_NUM_THREADS=1
-export MKL_NUM_THREADS=1
-export VECLIB_MAXIMUM_THREADS=1
-export NUMEXPR_NUM_THREADS=1
+export OMP_NUM_THREADS="$thread_count"
+export OPENBLAS_NUM_THREADS="$thread_count"
+export MKL_NUM_THREADS="$thread_count"
+export VECLIB_MAXIMUM_THREADS="$thread_count"
+export NUMEXPR_NUM_THREADS="$thread_count"
 export PYTHONHASHSEED=0
 
 printf 'Running focused tests with %s\n' "$python_path"
@@ -145,25 +145,29 @@ mkdir -p -- "$scratch_root/runs" "$log_root"
 mkdir -- "$run_root"
 mkdir -- "$job_dir"
 
-printf 'Submitting run_id=%s revision=%s account=%s\n' "$run_id" "$revision" "$account"
+printf 'Submitting run_id=%s revision=%s account=%s\n' \
+    "$run_id" "$revision" "$slurm_account"
 if ! job_id=$(sbatch --parsable \
-    --job-name=retro-gol-cpu-cal \
-    --account="$account" \
-    --partition=htc \
-    --qos=public \
-    --nodes=1 \
-    --ntasks=1 \
-    --cpus-per-task=1 \
-    --mem=4G \
-    --time=00:20:00 \
-    --open-mode=truncate \
-    --export=NONE \
+    --job-name="$slurm_job_name" \
+    --account="$slurm_account" \
+    --partition="$slurm_partition" \
+    --qos="$slurm_qos" \
+    --nodes="$slurm_nodes" \
+    --ntasks="$slurm_ntasks" \
+    --cpus-per-task="$slurm_cpus_per_task" \
+    --mem="$slurm_memory" \
+    --time="$slurm_wall_time" \
+    --open-mode="$slurm_open_mode" \
+    --export="$slurm_export_mode" \
     --no-requeue \
     --chdir="$repo_root" \
     --output="$log_root/%x-%j.out" \
     --error="$log_root/%x-%j.err" \
-    "$slurm_script" \
-    "$repo_root" "$python_path" "$scratch_root" "$revision" \
+    "$worker_script" \
+    "$repo_root" "$python_path" "$scratch_root" "$config_path" \
+    "$parent_script" "$worker_script" "$run_id" "$thread_count" \
+    "$slurm_job_name" "$slurm_account" "$slurm_partition" "$slurm_qos" \
+    "$slurm_nodes" "$slurm_ntasks" "$slurm_cpus_per_task" "$revision" \
     "$config_sha256" "$plan_sha256" "$plan_manifest_sha256" \
     "$plan_marker_sha256"); then
     printf 'ERROR: sbatch failed; retained plan=%s reserved_run_root=%s\n' \
@@ -175,7 +179,19 @@ submission_tmp="$job_dir/.submission.txt.tmp"
 {
     printf 'job_id=%s\n' "$job_id"
     printf 'run_id=%s\n' "$run_id"
-    printf 'account=%s\n' "$account"
+    printf 'slurm_job_name=%s\n' "$slurm_job_name"
+    printf 'slurm_account=%s\n' "$slurm_account"
+    printf 'slurm_partition=%s\n' "$slurm_partition"
+    printf 'slurm_qos=%s\n' "$slurm_qos"
+    printf 'slurm_nodes=%s\n' "$slurm_nodes"
+    printf 'slurm_ntasks=%s\n' "$slurm_ntasks"
+    printf 'slurm_cpus_per_task=%s\n' "$slurm_cpus_per_task"
+    printf 'slurm_memory=%s\n' "$slurm_memory"
+    printf 'slurm_wall_time=%s\n' "$slurm_wall_time"
+    printf 'slurm_open_mode=%s\n' "$slurm_open_mode"
+    printf 'slurm_export_mode=%s\n' "$slurm_export_mode"
+    printf 'slurm_requeue=false\n'
+    printf 'thread_count=%s\n' "$thread_count"
     printf 'git_revision=%s\n' "$revision"
     printf 'config_sha256=%s\n' "$config_sha256"
     printf 'plan_sha256=%s\n' "$plan_sha256"
@@ -183,6 +199,9 @@ submission_tmp="$job_dir/.submission.txt.tmp"
     printf 'plan_marker_sha256=%s\n' "$plan_marker_sha256"
     printf 'repo_root=%s\n' "$repo_root"
     printf 'python_path=%s\n' "$python_path"
+    printf 'config_path=%s\n' "$config_path"
+    printf 'parent_script=%s\n' "$parent_script"
+    printf 'worker_script=%s\n' "$worker_script"
     printf 'scratch_root=%s\n' "$scratch_root"
 } > "$submission_tmp"
 mv -- "$submission_tmp" "$job_dir/submission.txt"
@@ -190,7 +209,7 @@ mv -- "$submission_tmp" "$job_dir/submission.txt"
 printf 'Submitted job_id=%s\n' "$job_id"
 printf 'Queue: squeue -j %s\n' "$job_id"
 job_number=${job_id%%;*}
-printf 'Stdout: %s/retro-gol-cpu-cal-%s.out\n' "$log_root" "$job_number"
-printf 'Stderr: %s/retro-gol-cpu-cal-%s.err\n' "$log_root" "$job_number"
+printf 'Stdout: %s/%s-%s.out\n' "$log_root" "$slurm_job_name" "$job_number"
+printf 'Stderr: %s/%s-%s.err\n' "$log_root" "$slurm_job_name" "$job_number"
 printf '%s\n' \
     "After completion: sacct -j $job_id --units=K --format=JobIDRaw,JobName%28,Account,Partition,QOS,NodeList,AllocCPUS,NTasks,ElapsedRaw,TotalCPU,CPUTimeRAW,MaxRSS,State,ExitCode"
