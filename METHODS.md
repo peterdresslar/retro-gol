@@ -396,8 +396,9 @@ Decision statuses:
 
 ## RG-CAL-001 — First Sol CPU fixed-workload calibration
 
-- **Status:** Provisional; review after the first Sol result and before the
-  deadline-aware wall-time tester
+- **Status:** Accepted serial baseline; completed 2026-07-22. This result does
+  not satisfy the deadline-aware wall-time, private-backup, or CPU-scaling
+  gates.
 - **Decision:** Run one serial NumPy CPU warmup across all four primary strata.
   The immutable workload contains 1,000 trajectories per stratum, uses disjoint
   PCG64 seeds, and permits at most 10,000 committed transitions per trajectory;
@@ -439,6 +440,26 @@ Decision statuses:
   artifacts must not be represented as a production corpus or as durable
   scratch-to-private backup validation. No remote transfer occurs without a
   separately approved destination and invocation.
+- **Observed result:** Slurm job `59586965` completed with exit code `0:0` at
+  Git revision `457df1f7286fcd6c564bb1f7960c03ec1cedcba4`. All 4,000 planned
+  trajectories completed under RG-STOP-001 before the 10,000-transition
+  ceiling, yielding 1,013,325 transitions and 942,230,712 cell updates. The
+  instrumented pipeline took 474.707 seconds: artifact writes and checksums
+  used 54.24%, simulation 22.14%, and immediate validation 21.76%. The complete
+  generator command took 883.24 seconds because it also included two full-run
+  verifications; the independent third verifier took 221.80 seconds. The whole
+  job used 1,120 of 1,200 requested seconds and 541.740 CPU-seconds, or 48.37%
+  occupancy. Logical trajectory artifacts were 134,234,530 bytes, GNU
+  `time` observed at most 65,168 KiB RSS, and Slurm recorded `billing=2` for
+  the one-CPU, 4-GiB allocation. The full result and interpretation are recorded
+  in `docs/sol-cpu-timing-v1.md`.
+
+  The copied local evidence is a timing-summary bundle rather than a complete
+  run mirror. Its pasted `summary.json` omitted only the writer's final newline;
+  restoring that LF reproduces the recorded Sol SHA-256 exactly. The bundle
+  lacks the trajectory artifacts and final manifest required to rerun
+  `verify_run`, so successful original verification and locally repeatable
+  verification remain distinct claims.
 - **Evidence:** The first local probe established correctness and format, but
   was too short for cluster throughput measurement and left 19 of 20 \(N=32\)
   trajectories active at generation 100. Sol documents `htc` as the partition
@@ -455,8 +476,8 @@ Decision statuses:
   precision and duration of the measurement but does not change the validity of
   any completed B3/S23 transition.
 - **Affected configurations:** `calibrations/sol_cpu_timing_v1.json`, its Slurm
-  job and submission wrapper, the reference configuration validator, and the
-  first Sol timing report.
+  job and submission wrapper, the reference configuration validator, and
+  `docs/sol-cpu-timing-v1.md`.
 
 ## RG-SCALE-001 — Calibration and scale authorization
 

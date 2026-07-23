@@ -87,3 +87,7 @@ Review the result `summary.json`, all three GNU time records,
 `slurm-context.txt`, Slurm stdout/stderr, and the completed `sacct` record
 together. The job performs no remote upload or backup; `backup_mode` is
 explicitly `none_sol_calibration`.
+
+Job `59586965` completed this calibration on 2026-07-22. The reconciled result,
+timing breakdown, integrity note, and next-gate implications are recorded in
+[`docs/sol-cpu-timing-v1.md`](../docs/sol-cpu-timing-v1.md).
