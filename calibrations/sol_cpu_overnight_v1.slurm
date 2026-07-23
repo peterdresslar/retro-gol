@@ -106,8 +106,8 @@ deadline_unix=$((start_unix + scientific_wall_time_seconds))
 } > "$job_dir/slurm-context.txt"
 printf 'PAUSE or STOP control path: %s\n' "$control_path"
 printf 'Inspect: test -f %q && cat %q\n' "$control_path" "$control_path"
-printf 'Request PAUSE: printf PAUSE > %q\n' "$control_path"
-printf 'Request STOP: printf STOP > %q\n' "$control_path"
+printf 'Request PAUSE: printf PAUSE > %q.tmp && mv -- %q.tmp %q\n' "$control_path" "$control_path" "$control_path"
+printf 'Request STOP: printf STOP > %q.tmp && mv -- %q.tmp %q\n' "$control_path" "$control_path" "$control_path"
 
 multiprog_path="$job_dir/overnight-multiprog.conf"
 multiprog_tmp="$job_dir/.overnight-multiprog.conf.tmp"
