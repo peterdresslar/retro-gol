@@ -5,7 +5,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from retro_gol.generate import build_plan, execute, load_config, verify_run
+from retro_gol.generate import (
+    build_plan,
+    build_shard_plan,
+    execute,
+    load_config,
+    verify_run,
+)
 
 
 def small_config() -> dict[str, object]:
@@ -101,6 +107,75 @@ class GenerationTests(unittest.TestCase):
                 manifest["input_plan_sha256"],
                 manifest["plan_sha256"],
             )
+
+    def test_scaling_shards_are_deterministic_and_disjoint(self) -> None:
+        config = small_config()
+        config["purpose"] = "sol_cpu_scaling_calibration"
+        config["backup_mode"] = "required_private_hf"
+        config["trajectories_per_stratum"] = 8
+        plan = build_plan(config)
+        shard_plans = [
+            build_shard_plan(plan, "a" * 64, shard_index, 4)
+            for shard_index in range(4)
+        ]
+        self.assertEqual([shard["unit_count"] for shard in shard_plans], [2] * 4)
+        self.assertEqual(
+            sorted(
+                unit["unit_index"]
+                for shard in shard_plans
+                for unit in shard["units"]
+            ),
+            list(range(8)),
+        )
+        self.assertEqual(
+            [shard["shard"]["shard_index"] for shard in shard_plans],
+            list(range(4)),
+        )
+
+    def test_scaling_run_requires_both_shard_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            config = small_config()
+            config["purpose"] = "sol_cpu_scaling_calibration"
+            config["backup_mode"] = "required_private_hf"
+            config_path = self.write_config(directory, config)
+            plan_dir = directory / "plan"
+            execute("plan", config_path, plan_dir)
+            with self.assertRaisesRegex(ValueError, "supplied together"):
+                execute(
+                    "run",
+                    config_path,
+                    directory / "run",
+                    plan_dir / "plan.json",
+                    shard_index=0,
+                )
+
+    def test_scaling_shard_runs_verify_against_master_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            config = small_config()
+            config["purpose"] = "sol_cpu_scaling_calibration"
+            config["backup_mode"] = "required_private_hf"
+            config["trajectories_per_stratum"] = 2
+            config_path = self.write_config(directory, config)
+            plan_dir = directory / "plan"
+            execute("plan", config_path, plan_dir)
+            for shard_index in range(2):
+                run_dir = directory / f"run-{shard_index}"
+                result = execute(
+                    "run",
+                    config_path,
+                    run_dir,
+                    plan_dir / "plan.json",
+                    shard_index=shard_index,
+                    shard_count=2,
+                )
+                self.assertEqual(result["trajectory_count"], 1)
+                verify_run(run_dir)
+                manifest = json.loads(
+                    (run_dir / "manifest.json").read_text(encoding="utf-8")
+                )
+                self.assertEqual(manifest["shard"]["shard_index"], shard_index)
 
     def test_missing_and_unknown_config_keys_fail(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:

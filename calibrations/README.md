@@ -91,3 +91,22 @@ explicitly `none_sol_calibration`.
 Job `59586965` completed this calibration on 2026-07-22. The reconciled result,
 timing breakdown, integrity note, and next-gate implications are recorded in
 [`docs/sol-cpu-timing-v1.md`](../docs/sol-cpu-timing-v1.md).
+
+## RG-CAL-002 scaling preparation
+
+The scaling configuration and deterministic plan-only launcher are now tracked:
+
+- sol_cpu_scaling_v1.json fixes the RG-CAL-001 workload under run ID
+  sol-cpu-scaling-v1.
+- plan_sol_cpu_scaling_v1.sh runs tests and materializes the master plan
+  without allocating Sol resources or contacting Hugging Face.
+- retro_gol.scaling partitions that plan by unit_index modulo W, aggregates
+  exact shard coverage, and compares decoded trajectory content across
+  W={1,2,4,8}.
+- retro_gol.backup finalizes and strictly validates the private-HF export,
+  sync plan, and remote listing without making network calls during tests.
+
+The submission wrapper intentionally exits with an explicit gate error until
+the minimal Sol compute-plus-private-backup smoke required by RG-SCALE-001 has
+been completed and reviewed. No scaling job or upload has been started from
+this checkout.

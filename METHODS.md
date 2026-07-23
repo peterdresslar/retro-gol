@@ -488,6 +488,96 @@ Decision statuses:
   job and submission wrapper, the reference configuration validator, and
   `docs/sol-cpu-timing-v1.md`.
 
+## RG-CAL-002 — Sol CPU fixed-work strong-scaling calibration
+
+- **Status:** Accepted for implementation and local verification. Sol launch is
+  pending the compute-and-private-backup smoke required by gate 3 of
+  RG-SCALE-001; preparing these tracked files does not supersede that gate.
+- **Decision:** Measure the complete fixed-work pipeline with
+  `W in {1, 2, 4, 8}` independent, single-threaded NumPy processes. Every condition
+  reuses the RG-CAL-001 scientific workload exactly: 4,000 trajectories, 1,000
+  in each accepted `(N, p)` stratum, seeds beginning at `202607230000`, exact
+  recurrence stopping, and a 10,000-transition engineering ceiling. This is a
+  scaling calibration, not a new training-data sample. The `W=1` condition
+  uses the same sharded code path as the other conditions.
+
+  A pre-submission master plan fixes all units. Process `w`, for
+  `0 <= w < W`, owns exactly those units whose `unit_index % W == w`. Because
+  1,000 is divisible by every selected `W`, each process receives the same number of
+  units from every stratum: respectively 1,000, 500, 250, or 125 trajectories
+  per stratum for `W=1,2,4,8`. Each process writes only its own atomic shard
+  directory and records the master-plan checksum, total master-unit count,
+  process count, process index, and literal assignment rule. Aggregation calls
+  the full run verifier exactly once per shard, rejects missing, duplicate,
+  unexpected, or misplaced units, and writes a small aggregate index without
+  copying trajectory artifacts. Together with simulation, immediate
+  validation, and the generator's two completion checks, this preserves the
+  five evolution-equivalent passes measured in RG-CAL-001.
+
+  Cross-condition comparison excludes timing and filesystem paths but requires
+  identical planned metadata, terminal status, transition count, last valid
+  generation, unique-state count, `mu`, `period_lambda`, generation ceiling,
+  cell-update count, and decoded trajectory-array content for every unit. A
+  mismatch is an error, not an averaged result. The primary timing is the
+  generation-and-local-finalization `srun` makespan. Import warm-up, per-process
+  GNU `time -v`, serial aggregate verification, whole-condition elapsed time,
+  scheduler accounting, requested and allocated TRES, CPU occupancy, billing,
+  and storage are recorded separately. Report strong-scaling speedup
+  `S_W = T_1 / T_W` and efficiency `E_W = T_1 / (W T_W)` for generation makespan
+  and whole-condition elapsed time separately.
+
+  Use four resource-matched, sequential Sol jobs rather than reserving eight
+  CPUs while smaller conditions run. Each condition requests one node,
+  `ntasks=W`, one CPU and 1 GiB per task, 30 minutes, account
+  `grp_bdaniel6`, partition `htc`, QoS `public`, no requeue, no inherited
+  environment, and one thread for NumPy and every named BLAS thread control.
+  The 30-minute request is a software-failure bound; a scheduler timeout is not
+  valid scientific wall-time censoring. Sequential conditions avoid concurrent
+  campaign I/O. A failed condition prevents later compute, while a dependent
+  finalizer still records the incomplete compute and backup outcomes.
+
+  The tracked campaign ID is `sol-cpu-scaling-v1`. Planning and submission are
+  separate zero-argument scripts so the complete materialized plan can be
+  reviewed before allocation. Submission refuses revision, configuration,
+  lock, plan, environment, or path drift. The required private destination is
+  `hf://buckets/peterdresslar/retro-gol-private/calibrations/sol-cpu-scaling-v1/backup-attempt-001/export`.
+  The repository-pinned `.venv/bin/hf` 1.24.0 client, authenticated identity,
+  private bucket, and absent attempt prefix are checked before compute and
+  again by the dependent backup job.
+
+  Backup uses one atomically finalized, allowlisted export with an exact
+  relative-path, byte-count, and SHA-256 manifest. The client first writes a
+  JSONL sync plan. Project code strictly checks the exact local source and
+  remote destination, recomputes its summary, requires exactly one upload for
+  every export file and no skip, download, delete, duplicate, traversal, or
+  unknown record, then rechecks local hashes before applying that same plan
+  once with no deletion and no automatic retry. Remote success requires an
+  exact recursive file/size listing followed by one download to a fresh
+  directory and full SHA-256 verification. Compute completion, local export
+  completion, and remote backup completion remain separate records. A failed
+  transfer preserves the original failure and requires a new tracked backup
+  attempt rather than reuse of the partially populated prefix.
+- **Evidence:** RG-CAL-001 used only 48.37% of its allocated CPU time and spent
+  more time writing, checksumming, and repeatedly verifying artifacts than
+  simulating. Independent processes can overlap those per-trajectory costs
+  without changing the readable NumPy reference implementation. Its maximum
+  observed RSS was 65,168 KiB, so 1 GiB per process supplies substantial
+  margin while avoiding the 4-GiB request that Sol billed as two CPUs.
+- **Alternatives considered:** A `multiprocessing.Pool`, which would add an
+  unnecessary second execution interface; NumPy or BLAS threads, which do not
+  distribute the trajectory-level workload; one eight-CPU allocation reused
+  for every condition, which would consume idle fair-share allocation; or
+  contiguous plan slices, which would segregate strata and make process timing
+  less comparable.
+- **Likely sensitivity:** Low to valid B3/S23 trajectories because unit inputs
+  and outputs must agree exactly across conditions; high to filesystem-aware
+  throughput, CPU occupancy, fair-share cost, and the resource choice for the
+  deadline-aware tester.
+- **Affected configurations:** `calibrations/sol_cpu_scaling_v1.json`, its
+  plan, submission, compute, finalization, and backup scripts,
+  `retro_gol.generate`, the direct scaling and backup validators, and the Sol
+  calibration report derived after completion.
+
 ## RG-SCALE-001 — Calibration and scale authorization
 
 - **Status:** Accepted

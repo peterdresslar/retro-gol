@@ -48,7 +48,10 @@ REQUIRED_CONFIG_KEYS = {
 PURPOSE_BACKUP_MODES = {
     "first_generation_probe": "none_local_probe",
     "sol_cpu_timing_calibration": "none_sol_calibration",
+    "sol_cpu_scaling_calibration": "required_private_hf",
 }
+
+SHARD_ASSIGNMENT = "unit_index_mod_shard_count"
 
 SOURCE_PATHS = (
     "AGENTS.md",
@@ -59,6 +62,8 @@ SOURCE_PATHS = (
     "retro_gol/__main__.py",
     "retro_gol/simulation.py",
     "retro_gol/generate.py",
+    "retro_gol/scaling.py",
+    "retro_gol/backup.py",
 )
 
 
@@ -337,6 +342,75 @@ def build_plan(config: dict[str, object]) -> dict[str, object]:
     }
 
 
+def build_shard_plan(
+    master_plan: dict[str, object],
+    master_plan_sha256: str,
+    shard_index: int,
+    shard_count: int,
+) -> dict[str, object]:
+    if not isinstance(shard_count, int) or isinstance(shard_count, bool):
+        raise ValueError(
+            "shard_count must be an integer; "
+            f"observed shard_count={shard_count!r}"
+        )
+    if not isinstance(shard_index, int) or isinstance(shard_index, bool):
+        raise ValueError(
+            "shard_index must be an integer; "
+            f"observed shard_index={shard_index!r}"
+        )
+    units = master_plan.get("units")
+    master_unit_count = master_plan.get("unit_count")
+    if not isinstance(units, list) or master_unit_count != len(units):
+        raise ValueError(
+            "Master plan units and unit_count must agree before sharding; "
+            f"observed unit_count={master_unit_count!r}, "
+            f"observed units_type={type(units).__name__}, "
+            f"observed units_count={len(units) if isinstance(units, list) else None}"
+        )
+    if shard_count < 1 or shard_count > master_unit_count:
+        raise ValueError(
+            "shard_count must be in [1, master_unit_count]; "
+            f"observed shard_count={shard_count}, "
+            f"master_unit_count={master_unit_count}"
+        )
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError(
+            "shard_index must be in [0, shard_count); "
+            f"observed shard_index={shard_index}, shard_count={shard_count}"
+        )
+    if not isinstance(master_plan_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", master_plan_sha256
+    ):
+        raise ValueError(
+            "master_plan_sha256 must be a lowercase SHA-256 hexadecimal string; "
+            f"observed={master_plan_sha256!r}"
+        )
+    if "shard" in master_plan:
+        raise ValueError("Master plan must not already contain shard metadata")
+
+    unit_indices = [unit.get("unit_index") for unit in units]
+    if unit_indices != list(range(master_unit_count)):
+        raise ValueError(
+            "Master plan unit_index values must be contiguous in plan order; "
+            f"expected_start=0, expected_stop={master_unit_count}, "
+            f"observed_start={unit_indices[:3]!r}, observed_end={unit_indices[-3:]!r}"
+        )
+    shard_units = [
+        unit for unit in units if unit["unit_index"] % shard_count == shard_index
+    ]
+    shard_plan = dict(master_plan)
+    shard_plan["unit_count"] = len(shard_units)
+    shard_plan["units"] = shard_units
+    shard_plan["shard"] = {
+        "master_plan_sha256": master_plan_sha256,
+        "master_unit_count": master_unit_count,
+        "shard_index": shard_index,
+        "shard_count": shard_count,
+        "assignment": SHARD_ASSIGNMENT,
+    }
+    return shard_plan
+
+
 def _git_metadata() -> dict[str, object]:
     revision = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -531,7 +605,14 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
         )
     input_plan_path = manifest.get("input_plan_path")
     input_plan_sha256 = manifest.get("input_plan_sha256")
-    if resolved_config.get("purpose") == "sol_cpu_timing_calibration":
+    purpose = resolved_config.get("purpose")
+    units = plan.get("units")
+    if not isinstance(units, list):
+        raise RuntimeError(
+            "Run plan units must be a list; "
+            f"observed type={type(units).__name__}, path={plan_path}"
+        )
+    if purpose == "sol_cpu_timing_calibration":
         if (
             not isinstance(input_plan_path, str)
             or not Path(input_plan_path).is_absolute()
@@ -545,6 +626,85 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
                 "Sol calibration input plan checksum differs from the retained plan; "
                 f"input_plan_sha256={input_plan_sha256!r}, "
                 f"plan_sha256={manifest.get('plan_sha256')!r}, path={manifest_path}"
+            )
+    elif purpose == "sol_cpu_scaling_calibration":
+        if (
+            not isinstance(input_plan_path, str)
+            or not Path(input_plan_path).is_absolute()
+        ):
+            raise RuntimeError(
+                "Sol scaling manifest requires an absolute master input_plan_path; "
+                f"observed={input_plan_path!r}, path={manifest_path}"
+            )
+        shard = plan.get("shard")
+        if not isinstance(shard, dict):
+            raise RuntimeError(
+                "Sol scaling plan requires shard metadata; "
+                f"observed type={type(shard).__name__}, path={plan_path}"
+            )
+        expected_shard_keys = {
+            "master_plan_sha256",
+            "master_unit_count",
+            "shard_index",
+            "shard_count",
+            "assignment",
+        }
+        if set(shard) != expected_shard_keys:
+            raise RuntimeError(
+                "Sol scaling shard metadata keys are incorrect; "
+                f"expected={sorted(expected_shard_keys)}, observed={sorted(shard)}, "
+                f"path={plan_path}"
+            )
+        if input_plan_sha256 != shard["master_plan_sha256"]:
+            raise RuntimeError(
+                "Sol scaling input plan checksum differs from shard master checksum; "
+                f"input_plan_sha256={input_plan_sha256!r}, "
+                f"master_plan_sha256={shard['master_plan_sha256']!r}, path={manifest_path}"
+            )
+        if shard["assignment"] != SHARD_ASSIGNMENT:
+            raise RuntimeError(
+                "Sol scaling shard assignment rule is unsupported; "
+                f"expected={SHARD_ASSIGNMENT!r}, observed={shard['assignment']!r}, "
+                f"path={plan_path}"
+            )
+        if (
+            not isinstance(shard["master_unit_count"], int)
+            or isinstance(shard["master_unit_count"], bool)
+            or not isinstance(shard["shard_count"], int)
+            or isinstance(shard["shard_count"], bool)
+            or not isinstance(shard["shard_index"], int)
+            or isinstance(shard["shard_index"], bool)
+            or shard["master_unit_count"] < 1
+            or shard["shard_count"] < 1
+            or shard["shard_count"] > shard["master_unit_count"]
+            or shard["shard_index"] < 0
+            or shard["shard_index"] >= shard["shard_count"]
+        ):
+            raise RuntimeError(
+                "Sol scaling shard numeric metadata is invalid; "
+                f"shard={shard!r}, path={plan_path}"
+            )
+        if plan.get("unit_count") != len(units) or plan.get("unit_count") < 1:
+            raise RuntimeError(
+                "Sol scaling retained plan unit_count is invalid; "
+                f"unit_count={plan.get('unit_count')!r}, path={plan_path}"
+            )
+        expected_indices = list(
+            range(shard["shard_index"], shard["master_unit_count"], shard["shard_count"])
+        )
+        observed_indices = [unit.get("unit_index") for unit in units]
+        if observed_indices != expected_indices:
+            raise RuntimeError(
+                "Sol scaling shard unit indices do not follow the master modulo assignment; "
+                f"expected_first={expected_indices[:3]!r}, observed_first={observed_indices[:3]!r}, "
+                f"expected_count={len(expected_indices)}, observed_count={len(observed_indices)}, "
+                f"path={plan_path}"
+            )
+        manifest_shard = manifest.get("shard")
+        if manifest_shard != shard:
+            raise RuntimeError(
+                "Sol scaling manifest shard metadata differs from its plan; "
+                f"plan={shard!r}, manifest={manifest_shard!r}, path={manifest_path}"
             )
     elif input_plan_path is not None or input_plan_sha256 is not None:
         raise RuntimeError(
@@ -600,12 +760,6 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
                 f"environment={source_sha256.get(record['project_path'])}"
             )
 
-    units = plan.get("units")
-    if not isinstance(units, list):
-        raise RuntimeError(
-            "Run plan units must be a list; "
-            f"observed type={type(units).__name__}, path={plan_path}"
-        )
     planned_by_id = {unit["unit_id"]: unit for unit in units}
     if len(planned_by_id) != len(units) or plan.get("unit_count") != len(units):
         raise RuntimeError(
@@ -758,22 +912,36 @@ def execute(
     config_path: Path,
     output_dir: Path,
     input_plan_path: Path | None = None,
+    shard_index: int | None = None,
+    shard_count: int | None = None,
 ) -> dict[str, object]:
     config_path = config_path.resolve()
     output_dir = output_dir.resolve()
     config = load_config(config_path)
-    plan = build_plan(config)
-    plan["source_config_path"] = str(config_path)
-    plan["source_config_sha256"] = _sha256(config_path)
+    master_plan = build_plan(config)
+    master_plan["source_config_path"] = str(config_path)
+    master_plan["source_config_sha256"] = _sha256(config_path)
+    plan = master_plan
 
-    if mode == "plan" and input_plan_path is not None:
+    if mode == "plan" and (
+        input_plan_path is not None or shard_index is not None or shard_count is not None
+    ):
         raise ValueError(
-            "Plan mode does not accept an input plan; "
-            f"observed input_plan_path={input_plan_path}"
+            "Plan mode does not accept an input plan or shard selection; "
+            f"observed input_plan_path={input_plan_path}, shard_index={shard_index}, "
+            f"shard_count={shard_count}"
+        )
+    if (shard_index is None) != (shard_count is None):
+        raise ValueError(
+            "shard_index and shard_count must be supplied together; "
+            f"observed shard_index={shard_index}, shard_count={shard_count}"
         )
     if (
         mode == "run"
-        and config["purpose"] != "sol_cpu_timing_calibration"
+        and config["purpose"] not in {
+            "sol_cpu_timing_calibration",
+            "sol_cpu_scaling_calibration",
+        }
         and input_plan_path is not None
     ):
         raise ValueError(
@@ -782,13 +950,29 @@ def execute(
         )
     if (
         mode == "run"
-        and config["purpose"] == "sol_cpu_timing_calibration"
+        and config["purpose"] in {
+            "sol_cpu_timing_calibration",
+            "sol_cpu_scaling_calibration",
+        }
         and input_plan_path is None
     ):
         raise ValueError(
-            "The Sol CPU timing calibration requires --input-plan from the "
-            "completed pre-submission plan; observed input_plan_path=None, "
-            f"run_id={config['run_id']}"
+            "This Sol calibration requires --input-plan from the completed "
+            "pre-submission plan; observed input_plan_path=None, "
+            f"purpose={config['purpose']!r}, run_id={config['run_id']}"
+        )
+    if mode == "run" and config["purpose"] == "sol_cpu_scaling_calibration":
+        if shard_index is None or shard_count is None:
+            raise ValueError(
+                "The Sol scaling calibration requires shard_index and shard_count; "
+                f"observed shard_index={shard_index}, shard_count={shard_count}, "
+                f"run_id={config['run_id']}"
+            )
+    elif shard_index is not None or shard_count is not None:
+        raise ValueError(
+            "Shard selection is only valid for sol_cpu_scaling_calibration runs; "
+            f"purpose={config['purpose']!r}, shard_index={shard_index}, "
+            f"shard_count={shard_count}"
         )
 
     input_plan_sha256 = None
@@ -807,8 +991,8 @@ def execute(
                 f"path={input_plan_path}, line={error.lineno}, "
                 f"column={error.colno}, message={error.msg}"
             ) from error
-        if input_plan != plan:
-            expected_sha256 = hashlib.sha256(_canonical_json_bytes(plan)).hexdigest()
+        if input_plan != master_plan:
+            expected_sha256 = hashlib.sha256(_canonical_json_bytes(master_plan)).hexdigest()
             raise RuntimeError(
                 "Input plan differs from the plan resolved from this configuration; "
                 f"expected_sha256={expected_sha256}, "
@@ -816,6 +1000,13 @@ def execute(
                 f"path={input_plan_path}, run_id={config['run_id']}"
             )
         input_plan_sha256 = _sha256(input_plan_path)
+        if config["purpose"] == "sol_cpu_scaling_calibration":
+            plan = build_shard_plan(
+                master_plan,
+                input_plan_sha256,
+                shard_index,
+                shard_count,
+            )
 
     if output_dir.exists():
         raise FileExistsError(
@@ -969,6 +1160,7 @@ def execute(
                 str(input_plan_path) if input_plan_path is not None else None
             ),
             "input_plan_sha256": input_plan_sha256,
+            "shard": plan.get("shard"),
             "environment": _environment_metadata(),
             "source_snapshot": source_snapshot,
             "expected_trajectory_count": plan["unit_count"],
@@ -1020,12 +1212,16 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--input-plan", type=Path)
+    parser.add_argument("--shard-index", type=int)
+    parser.add_argument("--shard-count", type=int)
     arguments = parser.parse_args()
     result = execute(
         arguments.mode,
         arguments.config,
         arguments.output_dir,
         arguments.input_plan,
+        arguments.shard_index,
+        arguments.shard_count,
     )
     print(json.dumps(result, sort_keys=True))
 
