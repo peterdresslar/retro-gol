@@ -92,6 +92,30 @@ Job `59586965` completed this calibration on 2026-07-22. The reconciled result,
 timing breakdown, integrity note, and next-gate implications are recorded in
 [`docs/sol-cpu-timing-v1.md`](../docs/sol-cpu-timing-v1.md).
 
+## RG-CAL-003 private-backup smoke
+
+Before the scaling submission is enabled, run the tiny Sol compute and private
+Hugging Face backup smoke from a clean, prepared Sol checkout:
+
+```sh
+bash calibrations/submit_sol_private_backup_smoke_v1.sh
+```
+
+This zero-argument parent fixes the single `N=5`, `p=0.20` trajectory, Sol
+resources, scratch paths, pinned `.venv/bin/hf`, and private destination. It
+preflights the empty remote attempt prefix, submits one compute job and one
+dependent backup job, uploads the finalized export exactly once, downloads it
+to fresh scratch, and verifies every SHA-256. It prints both job IDs. Success
+requires the local marker:
+
+```text
+/scratch/pdressla/retro-gol/calibrations/runs/sol-private-backup-smoke-v1/BACKUP_COMPLETE
+```
+
+Any failed preflight, compute, upload, listing, download, or checksum leaves
+the attempt incomplete and exits nonzero. Do not delete or reuse a partial
+remote attempt; inspect it before creating a new tracked version.
+
 ## RG-CAL-002 scaling preparation
 
 The scaling configuration and deterministic plan-only launcher are now tracked:

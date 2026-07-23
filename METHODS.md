@@ -491,8 +491,9 @@ Decision statuses:
 ## RG-CAL-002 — Sol CPU fixed-work strong-scaling calibration
 
 - **Status:** Accepted for implementation and local verification. Sol launch is
-  pending the compute-and-private-backup smoke required by gate 3 of
-  RG-SCALE-001; preparing these tracked files does not supersede that gate.
+  pending successful completion and review of RG-CAL-003, the
+  compute-and-private-backup smoke required by gate 3 of RG-SCALE-001;
+  preparing these tracked files does not supersede that gate.
 - **Decision:** Measure the complete fixed-work pipeline with
   `W in {1, 2, 4, 8}` independent, single-threaded NumPy processes. Every condition
   reuses the RG-CAL-001 scientific workload exactly: 4,000 trajectories, 1,000
@@ -577,6 +578,63 @@ Decision statuses:
   plan, submission, compute, finalization, and backup scripts,
   `retro_gol.generate`, the direct scaling and backup validators, and the Sol
   calibration report derived after completion.
+
+## RG-CAL-003 — Minimal Sol compute and private-backup smoke
+
+- **Status:** Accepted for execution; satisfies RG-SCALE-001 gate 3 only after
+  both compute and independent remote verification complete successfully.
+- **Decision:** Run one deliberately tiny trajectory on Sol before authorizing
+  RG-CAL-002. The fixed workload uses `N=5`, requested density `p=0.20`, one
+  exactly populated initial state, PCG64 seed `202607240000`, traditional
+  B3/S23 rules on a square torus, exact-recurrence stopping, and a
+  20-transition engineering ceiling. The run ID is
+  `sol-private-backup-smoke-v1`; its result is calibration evidence, not
+  training data.
+
+  The zero-argument parent requests two sequential jobs under account
+  `grp_bdaniel6`, partition `htc`, and QoS `public`. The compute job requests
+  one task, one CPU, 1 GiB, and ten minutes. Its dependent backup job requests
+  the same CPU and memory for twenty minutes. Both disable requeue, inherit no
+  scheduler overrides, use the repository-local `.venv`, install nothing, and
+  fix NumPy and named BLAS thread counts to one. The parent requires a clean
+  checkout, runs the complete local tests, materializes and hashes the plan,
+  and refuses existing plan, run, log, staging, export, or remote-attempt
+  paths.
+
+  Before compute and again before transfer, require `.venv/bin/hf` version
+  1.24.0, authenticated user `peterdresslar`, private accessible bucket
+  `peterdresslar/retro-gol-private`, and an empty destination prefix. The sole
+  upload destination is
+  `hf://buckets/peterdresslar/retro-gol-private/calibrations/sol-private-backup-smoke-v1/backup-attempt-001/export`.
+  Authentication uses the prepared HF credential store; no token is passed or
+  printed.
+
+  After the compute job and its logs close, the backup job verifies the run,
+  constructs an allowlisted export in an atomic staging directory, writes the
+  exact path/size/SHA-256 export manifest, and verifies it locally. It then
+  writes and strictly validates one upload-only `hf buckets sync` plan, applies
+  that same plan exactly once without deletion or automatic retry, validates
+  the exact remote recursive file/size listing, downloads the remote prefix to
+  a fresh staging directory, and verifies every SHA-256 against the downloaded
+  export manifest. `BACKUP_COMPLETE` is written only after that independent
+  download succeeds. Compute completion, export completion, and backup
+  completion remain separate evidence; any failure exits nonzero and preserves
+  the original attempt for inspection.
+- **Evidence:** The pinned HF client and project-side sync validators pass local
+  fixtures, but local validation cannot establish Sol egress, the prepared Sol
+  credential, bucket write permission, Xet transfer behavior, or remote byte
+  recovery. One tiny scientific artifact exercises those missing operational
+  links at negligible compute and storage cost.
+- **Alternatives considered:** Treating identity and bucket-info reads as a
+  backup test, which does not establish write permission; using RG-CAL-002's
+  repeated 4,000-trajectory workload as the first upload; or retrying a partial
+  remote attempt in place. Each would weaken the staged gate or failure record.
+- **Likely sensitivity:** None to later Game-of-Life science; high to whether
+  Sol-to-private-HF backup is actually usable and auditable.
+- **Affected configurations:**
+  `calibrations/sol_private_backup_smoke_v1.json`, its parent, compute, and
+  backup scripts, `retro_gol.generate`, `retro_gol.backup`, and the RG-CAL-002
+  submission gate.
 
 ## RG-SCALE-001 — Calibration and scale authorization
 

@@ -12,5 +12,8 @@ if [ -n "$(compgen -A variable SBATCH_ || true)" ]; then
     exit 2
 fi
 
-printf '%s\n' +    'ERROR: RG-CAL-002 submission is intentionally held at the RG-SCALE-001 gate.' +    'Complete and review a tiny Sol compute-plus-private-HF-backup smoke first.' +    'The immutable plan-only path is: bash calibrations/plan_sol_cpu_scaling_v1.sh' >&2
+printf '%s\n' \
+    'ERROR: RG-CAL-002 submission is intentionally held at the RG-SCALE-001 gate.' \
+    'Complete and review RG-CAL-003 first:' \
+    '  bash calibrations/submit_sol_private_backup_smoke_v1.sh' >&2
 exit 2

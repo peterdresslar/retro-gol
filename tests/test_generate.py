@@ -108,6 +108,32 @@ class GenerationTests(unittest.TestCase):
                 manifest["plan_sha256"],
             )
 
+    def test_private_backup_smoke_is_exact_and_consumes_its_plan(self) -> None:
+        config_path = Path("calibrations/sol_private_backup_smoke_v1.json")
+        config = load_config(config_path)
+        plan = build_plan(config)
+        self.assertEqual(plan["run_id"], "sol-private-backup-smoke-v1")
+        self.assertEqual(plan["unit_count"], 1)
+        self.assertEqual(plan["units"][0]["N"], 5)
+        self.assertEqual(plan["units"][0]["K"], 5)
+        self.assertEqual(plan["units"][0]["seed"], 202607240000)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            copied_config_path = self.write_config(directory, config)
+            with self.assertRaisesRegex(ValueError, "requires --input-plan"):
+                execute("run", copied_config_path, directory / "missing-plan-run")
+
+            plan_dir = directory / "plan"
+            execute("plan", copied_config_path, plan_dir)
+            run_dir = directory / "run"
+            execute("run", copied_config_path, run_dir, plan_dir / "plan.json")
+            verify_run(run_dir)
+            manifest = json.loads(
+                (run_dir / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(manifest["input_plan_sha256"], manifest["plan_sha256"])
+
     def test_scaling_shards_are_deterministic_and_disjoint(self) -> None:
         config = small_config()
         config["purpose"] = "sol_cpu_scaling_calibration"

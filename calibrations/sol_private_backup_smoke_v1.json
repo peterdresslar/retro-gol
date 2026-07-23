@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "purpose": "sol_private_backup_smoke",
+  "run_id": "sol-private-backup-smoke-v1",
+  "implementation": "numpy_reference",
+  "topology": "square_torus",
+  "rule": "B3/S23",
+  "board_sizes": [5],
+  "densities": ["0.20"],
+  "trajectories_per_stratum": 1,
+  "max_probe_generations": 20,
+  "seed_start": 202607240000,
+  "rng": "PCG64",
+  "state_dtype": "bool",
+  "state_order": "C",
+  "state_bit_order": "little",
+  "stopping_rule": "exact_recurrence_or_probe_generation_limit",
+  "backup_mode": "required_private_hf"
+}

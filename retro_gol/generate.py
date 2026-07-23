@@ -49,6 +49,7 @@ PURPOSE_BACKUP_MODES = {
     "first_generation_probe": "none_local_probe",
     "sol_cpu_timing_calibration": "none_sol_calibration",
     "sol_cpu_scaling_calibration": "required_private_hf",
+    "sol_private_backup_smoke": "required_private_hf",
 }
 
 SHARD_ASSIGNMENT = "unit_index_mod_shard_count"
@@ -612,7 +613,10 @@ def verify_run(run_dir: Path, require_complete: bool = True) -> None:
             "Run plan units must be a list; "
             f"observed type={type(units).__name__}, path={plan_path}"
         )
-    if purpose == "sol_cpu_timing_calibration":
+    if purpose in {
+        "sol_cpu_timing_calibration",
+        "sol_private_backup_smoke",
+    }:
         if (
             not isinstance(input_plan_path, str)
             or not Path(input_plan_path).is_absolute()
@@ -941,6 +945,7 @@ def execute(
         and config["purpose"] not in {
             "sol_cpu_timing_calibration",
             "sol_cpu_scaling_calibration",
+            "sol_private_backup_smoke",
         }
         and input_plan_path is not None
     ):
@@ -953,6 +958,7 @@ def execute(
         and config["purpose"] in {
             "sol_cpu_timing_calibration",
             "sol_cpu_scaling_calibration",
+            "sol_private_backup_smoke",
         }
         and input_plan_path is None
     ):
