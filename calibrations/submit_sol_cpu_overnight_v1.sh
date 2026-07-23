@@ -41,8 +41,9 @@ finalizer_cpus_per_task=4
 finalizer_mem_mib=16384
 finalizer_slurm_wall_time=04:00:00
 backup_memory_profile=4cpu-16GiB
+estimated_peak_scratch_gib=230
 
-for command_name in cp git mkdir sbatch sha256sum scontrol; do
+for command_name in awk cp df git mkdir sbatch sha256sum scontrol; do
     command -v "$command_name" >/dev/null 2>&1 || fail "required command is unavailable; command=$command_name"
 done
 [[ -x "$python_path" ]] || fail "repository Python is not executable; expected=$python_path"
@@ -80,6 +81,11 @@ PYTHON
 
 smoke_marker="$smoke_run_root/BACKUP_COMPLETE"
 [[ -f "$smoke_marker" ]] || fail "RG-CAL-003 completion evidence is missing; expected=$smoke_marker"
+[[ -d "$scratch_root" ]] || fail "overnight scratch root is missing; expected=$scratch_root"
+available_kib=$(df -Pk "$scratch_root" | awk 'NR == 2 {print $4}')
+[[ "$available_kib" =~ ^[0-9]+$ ]] || fail "scratch free-space report is invalid; observed_kib=$available_kib"
+required_kib=$((estimated_peak_scratch_gib * 1024 * 1024))
+(( available_kib >= required_kib )) || fail "insufficient scratch headroom for full retention and fresh-download verification; required_gib=$estimated_peak_scratch_gib available_gib=$((available_kib / 1024 / 1024)) scratch_root=$scratch_root"
 [[ ! -e "$run_root" ]] || fail "overnight run attempt already exists and requires explicit inspection; path=$run_root"
 [[ ! -e "$log_root" ]] || fail "overnight log root already exists and requires explicit inspection; path=$log_root"
 mkdir -p -- "$run_root/job" "$log_root"
@@ -117,6 +123,7 @@ checksum_record=$(sha256sum -- "$finalizer_script"); finalizer_sha256=${checksum
     printf 'compute_partition=%s\ncompute_qos=%s\ncompute_ntasks=%s\ncompute_cpus_per_task=%s\ncompute_mem_per_cpu_mib=%s\ncompute_slurm_wall_time=%s\n' "$compute_partition" "$compute_qos" "$compute_ntasks" "$compute_cpus_per_task" "$compute_mem_per_cpu_mib" "$compute_slurm_wall_time"
     printf 'scientific_wall_time_seconds=%s\ndeadline_reserve_seconds=%s\n' "$scientific_wall_time_seconds" "$deadline_reserve_seconds"
     printf 'finalizer_partition=%s\nfinalizer_qos=%s\nfinalizer_cpus_per_task=%s\nfinalizer_mem_mib=%s\nfinalizer_slurm_wall_time=%s\n' "$finalizer_partition" "$finalizer_qos" "$finalizer_cpus_per_task" "$finalizer_mem_mib" "$finalizer_slurm_wall_time"
+    printf 'estimated_peak_scratch_gib=%s\navailable_scratch_kib=%s\n' "$estimated_peak_scratch_gib" "$available_kib"
     printf 'remote_uri=%s\nparent_sha256=%s\ncompute_sha256=%s\nfinalizer_sha256=%s\n' "$remote_uri" "$parent_sha256" "$compute_sha256" "$finalizer_sha256"
 } > "$job_dir/submission-plan.txt"
 

@@ -683,6 +683,9 @@ Decision statuses:
   at the observed W=8 rate, roughly 70 GiB of trajectory payload over twelve
   hours. This volume is intentional full retention; transfer is measured in a
   separate dependent allocation rather than charged against generation time.
+  The parent therefore requires approximately 230 GiB of free scratch space
+  before submission so the run, export, and fresh-download verification copies
+  can coexist.
 - **Alternatives considered:** Dropping trajectories to summaries, which would
   defeat the first training-data objective; using `htc`, whose protected
   window is four hours; or mixing export work into the generation allocation,

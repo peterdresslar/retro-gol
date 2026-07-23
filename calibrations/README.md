@@ -156,6 +156,9 @@ different allocations. The generation job requests `public/public` for
 and receives a scheduler warning 900 seconds before its allocation ends. The
 dependent finalizer requests four CPUs and 16 GiB for four hours to aggregate,
 checksum, export, upload, and fresh-download-verify the full retained run.
+Because the run, export, and fresh remote-copy verification coexist temporarily,
+the submitter requires approximately 230 GiB of free space below the configured
+scratch root before it allocates the compute job.
 
 First materialize the compact deterministic stream plan:
 
