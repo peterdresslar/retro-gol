@@ -108,6 +108,23 @@ class GenerationTests(unittest.TestCase):
                 manifest["plan_sha256"],
             )
 
+    def test_sol_cpu_scaling_plan_is_exact_and_balanced(self) -> None:
+        config = load_config(Path("calibrations/sol_cpu_scaling_v1.json"))
+        plan = build_plan(config)
+        self.assertEqual(plan["run_id"], "sol-cpu-scaling-v1")
+        self.assertEqual(plan["unit_count"], 4_000)
+        self.assertEqual(plan["units"][0]["seed"], 202607230000)
+        self.assertEqual(plan["units"][-1]["seed"], 202607233999)
+
+        for shard_count in (1, 2, 4, 8):
+            shard_sizes = [
+                build_shard_plan(plan, "a" * 64, shard_index, shard_count)[
+                    "unit_count"
+                ]
+                for shard_index in range(shard_count)
+            ]
+            self.assertEqual(shard_sizes, [4_000 // shard_count] * shard_count)
+
     def test_private_backup_smoke_is_exact_and_consumes_its_plan(self) -> None:
         config_path = Path("calibrations/sol_private_backup_smoke_v1.json")
         config = load_config(config_path)

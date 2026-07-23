@@ -11,8 +11,8 @@ fail() {
     exit 2
 }
 
-if [[ "$#" -ne 27 ]]; then
-    fail "expected twenty-seven parent-supplied arguments; observed_count=$#. Submit only through calibrations/submit_sol_cpu_scaling_v1.sh"
+if [[ "$#" -ne 28 ]]; then
+    fail "expected twenty-eight parent-supplied arguments; observed_count=$#. Submit only through calibrations/submit_sol_cpu_scaling_v1.sh"
 fi
 
 repo_root=$1
@@ -22,26 +22,27 @@ config_path=$4
 parent_source_path=$5
 worker_source_path=$6
 run_id=$7
-attempt_id=$8
-thread_count=$9
-expected_slurm_job_name=${10}
-expected_slurm_account=${11}
-expected_slurm_partition=${12}
-expected_slurm_qos=${13}
-expected_slurm_nodes=${14}
-expected_slurm_ntasks=${15}
-expected_slurm_cpus_per_task=${16}
-expected_slurm_mem_per_cpu_mib=${17}
-expected_slurm_wall_time=${18}
-expected_revision=${19}
-expected_config_sha256=${20}
-expected_plan_sha256=${21}
-expected_plan_manifest_sha256=${22}
-expected_plan_marker_sha256=${23}
-import_multiprog_path=${24}
-expected_import_multiprog_sha256=${25}
-generate_multiprog_path=${26}
-expected_generate_multiprog_sha256=${27}
+plan_id=$8
+attempt_id=$9
+thread_count=${10}
+expected_slurm_job_name=${11}
+expected_slurm_account=${12}
+expected_slurm_partition=${13}
+expected_slurm_qos=${14}
+expected_slurm_nodes=${15}
+expected_slurm_ntasks=${16}
+expected_slurm_cpus_per_task=${17}
+expected_slurm_mem_per_cpu_mib=${18}
+expected_slurm_wall_time=${19}
+expected_revision=${20}
+expected_config_sha256=${21}
+expected_plan_sha256=${22}
+expected_plan_manifest_sha256=${23}
+expected_plan_marker_sha256=${24}
+import_multiprog_path=${25}
+expected_import_multiprog_sha256=${26}
+generate_multiprog_path=${27}
+expected_generate_multiprog_sha256=${28}
 
 case "$expected_slurm_ntasks" in
     1|2|4|8) ;;
@@ -92,7 +93,7 @@ done
 [[ -x /usr/bin/time ]] || \
     fail "required GNU time executable is unavailable; expected=/usr/bin/time"
 
-plan_dir="$scratch_root/plans/$run_id"
+plan_dir="$scratch_root/plans/$plan_id"
 run_root="$scratch_root/runs/$run_id/$attempt_id"
 campaign_job_dir="$run_root/job"
 case_root="$run_root/cases/$condition_id"
@@ -232,7 +233,7 @@ failure_path="$case_job_dir/FAILURE.txt"
 record_failure() {
     status=$?
     set +e
-    if [[ ! -e "$failure_path" ]]; then
+    if [[ "$status" -ne 0 && ! -e "$failure_path" ]]; then
         failure_tmp="$case_job_dir/.FAILURE.txt.tmp"
         {
             printf 'recorded_at_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -243,9 +244,21 @@ record_failure() {
         } > "$failure_tmp"
         mv -- "$failure_tmp" "$failure_path"
     fi
-    exit "$status"
 }
-trap record_failure ERR
+trap record_failure EXIT
+
+previous_condition_id=
+case "$expected_slurm_ntasks" in
+    1) ;;
+    2) previous_condition_id=w01 ;;
+    4) previous_condition_id=w02 ;;
+    8) previous_condition_id=w04 ;;
+esac
+if [[ -n "$previous_condition_id" ]]; then
+    predecessor_marker="$run_root/cases/$previous_condition_id/job/COMPLETION.txt"
+    [[ -f "$predecessor_marker" ]] || \
+        fail "previous scaling condition did not complete; condition=$condition_id required_predecessor=$previous_condition_id expected_marker=$predecessor_marker"
+fi
 
 export OMP_NUM_THREADS="$thread_count"
 export OPENBLAS_NUM_THREADS="$thread_count"
@@ -342,7 +355,7 @@ completion_tmp="$case_job_dir/.COMPLETION.txt.tmp"
     du -sk -- "$case_root"
 } > "$completion_tmp"
 mv -- "$completion_tmp" "$case_job_dir/COMPLETION.txt"
-trap - ERR
+trap - EXIT
 
 printf 'Completed condition=%s W=%s aggregate=%s\n' \
     "$condition_id" "$expected_slurm_ntasks" "$aggregate_dir"

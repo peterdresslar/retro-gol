@@ -490,10 +490,9 @@ Decision statuses:
 
 ## RG-CAL-002 — Sol CPU fixed-work strong-scaling calibration
 
-- **Status:** Accepted for implementation and local verification. Sol launch is
-  pending successful completion and review of RG-CAL-003, the
-  compute-and-private-backup smoke required by gate 3 of RG-SCALE-001;
-  preparing these tracked files does not supersede that gate.
+- **Status:** Accepted for execution as the final fixed-generation calibration
+  before designing the overnight run. RG-CAL-003 satisfied gate 3 of
+  RG-SCALE-001 on 2026-07-22.
 - **Decision:** Measure the complete fixed-work pipeline with
   `W in {1, 2, 4, 8}` independent, single-threaded NumPy processes. Every condition
   reuses the RG-CAL-001 scientific workload exactly: 4,000 trajectories, 1,000
@@ -534,13 +533,20 @@ Decision statuses:
   environment, and one thread for NumPy and every named BLAS thread control.
   The 30-minute request is a software-failure bound; a scheduler timeout is not
   valid scientific wall-time censoring. Sequential conditions avoid concurrent
-  campaign I/O. A failed condition prevents later compute, while a dependent
-  finalizer still records the incomplete compute and backup outcomes.
+  campaign I/O. Each later allocation starts after the preceding job exits but
+  refuses generation unless the preceding condition has an atomic completion
+  marker. Thus a failed condition causes the remaining allocations to fail
+  during preflight rather than generate data, while the dependent finalizer
+  still records the incomplete compute and backup outcomes.
 
   The tracked campaign ID is `sol-cpu-scaling-v1`. Planning and submission are
   separate zero-argument scripts so the complete materialized plan can be
-  reviewed before allocation. Submission refuses revision, configuration,
-  lock, plan, environment, or path drift. The required private destination is
+  reviewed before allocation. The pre-gate plan-only artifact was never
+  launched and is superseded without deletion by
+  `sol-cpu-scaling-v1-plan-002`, because the accepted private-backup smoke
+  changed the tracked source snapshot and Git revision. Submission refuses
+  revision, configuration, lock, plan, environment, or path drift. The
+  required private destination is
   `hf://buckets/peterdresslar/retro-gol-private/calibrations/sol-cpu-scaling-v1/backup-attempt-001/export`.
   The repository-pinned `.venv/bin/hf` 1.24.0 client, authenticated identity,
   private bucket, and absent attempt prefix are checked before compute and
@@ -581,8 +587,10 @@ Decision statuses:
 
 ## RG-CAL-003 — Minimal Sol compute and private-backup smoke
 
-- **Status:** Accepted for execution; satisfies RG-SCALE-001 gate 3 only after
-  both compute and independent remote verification complete successfully.
+- **Status:** Completed 2026-07-22. Compute job `59607713` and dependent backup
+  job `59607714` both completed with exit code `0:0`; the local
+  `BACKUP_COMPLETE` marker and independently downloaded `remote-copy` were
+  observed. RG-SCALE-001 gate 3 is satisfied.
 - **Decision:** Run one deliberately tiny trajectory on Sol before authorizing
   RG-CAL-002. The fixed workload uses `N=5`, requested density `p=0.20`, one
   exactly populated initial state, PCG64 seed `202607240000`, traditional

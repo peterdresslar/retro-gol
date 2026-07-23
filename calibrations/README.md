@@ -116,21 +116,33 @@ Any failed preflight, compute, upload, listing, download, or checksum leaves
 the attempt incomplete and exits nonzero. Do not delete or reuse a partial
 remote attempt; inspect it before creating a new tracked version.
 
-## RG-CAL-002 scaling preparation
+## RG-CAL-002 final CPU scaling calibration
 
-The scaling configuration and deterministic plan-only launcher are now tracked:
+RG-CAL-003 completed successfully, so the final fixed-generation calibration
+is enabled. First materialize the current immutable plan:
 
-- sol_cpu_scaling_v1.json fixes the RG-CAL-001 workload under run ID
-  sol-cpu-scaling-v1.
-- plan_sol_cpu_scaling_v1.sh runs tests and materializes the master plan
-  without allocating Sol resources or contacting Hugging Face.
-- retro_gol.scaling partitions that plan by unit_index modulo W, aggregates
-  exact shard coverage, and compares decoded trajectory content across
-  W={1,2,4,8}.
-- retro_gol.backup finalizes and strictly validates the private-HF export,
-  sync plan, and remote listing without making network calls during tests.
+```sh
+bash calibrations/plan_sol_cpu_scaling_v1.sh
+```
 
-The submission wrapper intentionally exits with an explicit gate error until
-the minimal Sol compute-plus-private-backup smoke required by RG-SCALE-001 has
-been completed and reviewed. No scaling job or upload has been started from
-this checkout.
+This writes `sol-cpu-scaling-v1-plan-002`. The earlier pre-gate plan remains
+untouched but is intentionally not accepted for submission because the source
+revision changed while implementing and validating the private-backup smoke.
+After reviewing the new plan, submit the complete calibration:
+
+```sh
+bash calibrations/submit_sol_cpu_scaling_v1.sh
+```
+
+The parent submits four sequential conditions with `W={1,2,4,8}` one-thread
+workers. A failed condition prevents later generation. The final job compares
+all completed conditions, verifies exact scientific equivalence, uploads one
+finalized export to the private bucket, downloads it to fresh scratch, and
+verifies every SHA-256. Success requires:
+
+```text
+/scratch/pdressla/retro-gol/calibrations/runs/sol-cpu-scaling-v1/run-attempt-001/BACKUP_COMPLETE
+```
+
+This is the final planned generation-count calibration before choosing the
+worker count and deadline policy for an overnight run.

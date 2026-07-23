@@ -24,9 +24,10 @@ repo_root=$(cd -- "$script_dir/.." && pwd -P)
 python_path="$repo_root/.venv/bin/python"
 config_path="$script_dir/sol_cpu_scaling_v1.json"
 run_id=sol-cpu-scaling-v1
+plan_id=sol-cpu-scaling-v1-plan-002
 scratch_root=/scratch/pdressla/retro-gol/calibrations
-plan_dir="$scratch_root/plans/$run_id"
-plan_staging_dir="$scratch_root/plans/.$run_id.staging"
+plan_dir="$scratch_root/plans/$plan_id"
+plan_staging_dir="$scratch_root/plans/.$plan_id.staging"
 thread_count=1
 
 for command_name in git sha256sum; do
@@ -113,6 +114,7 @@ marker_sha256=$(sha256sum -- "$plan_dir/PLAN_COMPLETE")
 
 printf '\nPlan materialized; no Slurm job or remote operation was started.\n'
 printf 'run_id=%s\n' "$run_id"
+printf 'plan_id=%s\n' "$plan_id"
 printf 'git_revision=%s\n' "$revision"
 printf 'config=%s\nconfig_sha256=%s\n' "$config_path" "${config_sha256%% *}"
 printf 'plan=%s\nplan_sha256=%s\n' "$plan_dir/plan.json" "${plan_sha256%% *}"
