@@ -648,7 +648,7 @@ Decision statuses:
 
 - **Status:** Ready for execution after local smoke; this is the wall-time and
   storage probe in RG-SCALE-001, not authorization of the week-scale corpus.
-- **Decision:** Run the four primary ((N,p)) strata on eight independent,
+- **Decision:** Run the four primary \(N,p\) strata on eight independent,
   single-threaded NumPy CPU workers. The scientific generation deadline is
   43,200 seconds (12 hours). The compute allocation requests the `public`
   partition with `public` QoS for 12:20:00 and asks Slurm to send `SIGUSR1`
@@ -663,6 +663,12 @@ Decision statuses:
   is an upper bound only; wall time, not the capacity, determines the observed
   corpus size. Each worker writes disjoint artifacts, an append-only result
   index, a heartbeat, and an atomic completion marker.
+
+  The latest completed trajectory is the worker checkpoint for this first
+  tester. A scheduler warning is given enough reserve to finish the current
+  atomic generation and publish its censored trajectory; generation-level
+  hard-kill/restart recovery remains the separate RG-SCALE-001 gate 5 and is
+  not silently claimed by this run.
 
   A dependent finalizer is deliberately a separate resource surface. It uses
   one process with four CPUs, 16 GiB, and a four-hour `public/public` request to
