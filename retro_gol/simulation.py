@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from decimal import Decimal, ROUND_FLOOR
 
 import numpy as np
@@ -169,8 +170,16 @@ def sample_initial_state(N: int, K: int, seed: int) -> np.ndarray:
 def simulate_trajectory(
     x_0: np.ndarray,
     max_probe_generations: int,
+    stop_requested: Callable[[], bool] | None = None,
+    stop_status: str = "wall_time",
 ) -> dict[str, object]:
-    """Run until exact completion or the explicit probe-only generation limit."""
+    """Run until completion, a probe limit, or an atomic stop request.
+
+    ``stop_requested`` is sampled before a generation and immediately after a
+    committed generation.  The update itself is therefore atomic: a requested
+    stop never publishes a half-computed successor.  The default stop status is
+    ``wall_time`` because the long-run worker uses a monotonic deadline.
+    """
     validate_state(x_0)
     if (
         not isinstance(max_probe_generations, int)
@@ -180,6 +189,22 @@ def simulate_trajectory(
         raise ValueError(
             "max_probe_generations must be a positive integer; "
             f"observed value={max_probe_generations!r}"
+        )
+    if stop_requested is not None and not callable(stop_requested):
+        raise TypeError(
+            "stop_requested must be callable or None; "
+            f"observed type={type(stop_requested).__name__}"
+        )
+    allowed_stop_statuses = {
+        "wall_time",
+        "operator_pause",
+        "operator_stop",
+        "scheduler_signal",
+    }
+    if stop_status not in allowed_stop_statuses:
+        raise ValueError(
+            "stop_status is not recognized; "
+            f"expected one of={sorted(allowed_stop_statuses)}, observed={stop_status!r}"
         )
 
     x_t = x_0.copy()
@@ -197,6 +222,9 @@ def simulate_trajectory(
     else:
         status = "probe_generation_limit"
         for generation in range(1, max_probe_generations + 1):
+            if stop_requested is not None and stop_requested():
+                status = stop_status
+                break
             x_next = life_step_numpy(x_t)
             packed_next = pack_state(x_next)
             state_key = packed_next.tobytes()
@@ -228,6 +256,9 @@ def simulate_trajectory(
             seen_generation[state_key] = generation
             transition_target_index.append(len(packed_states) - 1)
             x_t = x_next
+            if stop_requested is not None and stop_requested():
+                status = stop_status
+                break
 
     return {
         "states_packed": np.stack(packed_states).astype(np.uint8, copy=False),
@@ -324,6 +355,10 @@ def validate_trajectory(trajectory: dict[str, object], N: int) -> None:
         "fixed_point",
         "recurrence",
         "probe_generation_limit",
+        "wall_time",
+        "operator_pause",
+        "operator_stop",
+        "scheduler_signal",
     }
     if status not in terminal_statuses:
         raise ValueError(
@@ -344,6 +379,22 @@ def validate_trajectory(trajectory: dict[str, object], N: int) -> None:
         if states_packed.shape[0] != transition_count + 1:
             raise RuntimeError(
                 "Probe-limit trajectory must store every nonrepeated state; "
+                f"states={states_packed.shape[0]}, transitions={transition_count}, N={N}"
+            )
+    elif status in {
+        "wall_time",
+        "operator_pause",
+        "operator_stop",
+        "scheduler_signal",
+    }:
+        if mu is not None or period_lambda is not None:
+            raise RuntimeError(
+                "Censored trajectory status cannot carry recurrence metadata; "
+                f"status={status!r}, mu={mu!r}, period_lambda={period_lambda!r}, N={N}"
+            )
+        if states_packed.shape[0] != transition_count + 1:
+            raise RuntimeError(
+                "Censored trajectory must store its valid state prefix; "
                 f"states={states_packed.shape[0]}, transitions={transition_count}, N={N}"
             )
     elif status == "extinction":

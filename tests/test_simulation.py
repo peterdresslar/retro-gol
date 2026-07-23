@@ -110,6 +110,30 @@ class SimulationTests(unittest.TestCase):
         self.assertIsNone(trajectory["period_lambda"])
         validate_trajectory(trajectory, N=5)
 
+    def test_atomic_wall_time_stop_preserves_valid_prefix(self) -> None:
+        glider = np.zeros((5, 5), dtype=np.bool_)
+        glider[0, 1] = True
+        glider[1, 2] = True
+        glider[2, 0:3] = True
+        stop_after_one_generation = iter((False, True)).__next__
+        trajectory = simulate_trajectory(
+            glider,
+            max_probe_generations=100,
+            stop_requested=stop_after_one_generation,
+        )
+        self.assertEqual(trajectory["status"], "wall_time")
+        self.assertEqual(trajectory["transition_count"], 1)
+        self.assertEqual(trajectory["states_packed"].shape[0], 2)
+        validate_trajectory(trajectory, N=5)
+
+    def test_unknown_atomic_stop_status_fails_explicitly(self) -> None:
+        with self.assertRaisesRegex(ValueError, "stop_status is not recognized"):
+            simulate_trajectory(
+                sample_initial_state(N=5, K=8, seed=16),
+                max_probe_generations=10,
+                stop_status="unknown",
+            )
+
     def test_live_cell_balancing_schedules(self) -> None:
         cases = (
             (10, Decimal("0.20"), [20] * 10),

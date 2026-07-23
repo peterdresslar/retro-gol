@@ -644,6 +644,51 @@ Decision statuses:
   backup scripts, `retro_gol.generate`, `retro_gol.backup`, and the RG-CAL-002
   submission gate.
 
+## RG-CAL-004 — Twelve-hour full-retention CPU wall-time tester
+
+- **Status:** Ready for execution after local smoke; this is the wall-time and
+  storage probe in RG-SCALE-001, not authorization of the week-scale corpus.
+- **Decision:** Run the four primary ((N,p)) strata on eight independent,
+  single-threaded NumPy CPU workers. The scientific generation deadline is
+  43,200 seconds (12 hours). The compute allocation requests the `public`
+  partition with `public` QoS for 12:20:00 and asks Slurm to send `SIGUSR1`
+  900 seconds before its limit. The worker treats the signal, a sticky
+  `PAUSE`/`STOP` control file, and the monotonic deadline as atomic
+  generation-boundary stops. Every committed trajectory, including a valid
+  wall-time-censored prefix, is retained as an uncompressed `.npz` artifact.
+
+  The plan is compact rather than a multi-million-entry JSON array: it fixes
+  the board/density order, a deterministic 100,000,000-trajectory capacity per
+  stratum, PCG64 `seed_start`, and the modulo-8 assignment rule. The capacity
+  is an upper bound only; wall time, not the capacity, determines the observed
+  corpus size. Each worker writes disjoint artifacts, an append-only result
+  index, a heartbeat, and an atomic completion marker.
+
+  A dependent finalizer is deliberately a separate resource surface. It uses
+  one process with four CPUs, 16 GiB, and a four-hour `public/public` request to
+  aggregate worker manifests, verify every retained artifact's byte count and
+  SHA-256, construct the full export, and perform the required one-shot private
+  Hugging Face upload plus fresh-download verification. Compute and transfer
+  outcomes remain separate. The finalizer's scientific verification scope is
+  `worker_validation_plus_finalizer_size_and_sha256`; re-running every forward
+  transition a second time is not part of this storage/transfer probe.
+- **Evidence:** W=8 retained 88.86% strong-scaling efficiency in RG-CAL-002.
+  RG-CAL-001 and RG-CAL-002 imply approximately 33.6 KiB per trajectory and,
+  at the observed W=8 rate, roughly 70 GiB of trajectory payload over twelve
+  hours. This volume is intentional full retention; transfer is measured in a
+  separate dependent allocation rather than charged against generation time.
+- **Alternatives considered:** Dropping trajectories to summaries, which would
+  defeat the first training-data objective; using `htc`, whose protected
+  window is four hours; or mixing export work into the generation allocation,
+  which would confound the wall-time throughput measurement.
+- **Likely sensitivity:** High to scratch capacity, export duplication, HF
+  transfer bandwidth, and finalizer wall time; none to the validity of a
+  worker-validated B3/S23 transition.
+- **Affected configurations:**
+  `calibrations/sol_cpu_overnight_v1.json`, its compact planner, eight-worker
+  Slurm launcher, atomic wall-time worker, finalizer, full-retention export,
+  and the private remote prefix.
+
 ## RG-SCALE-001 — Calibration and scale authorization
 
 - **Status:** Accepted
