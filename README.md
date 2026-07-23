@@ -95,3 +95,6 @@ The viewer refuses to start if the terminal cannot fit the complete board and
 controls. Retrodiction display additionally requires terminal color support.
 For sparse retrodiction files, `v` selects the nearest available source
 generation and the header always shows the selected transition explicitly.
+Each board cell occupies exactly one terminal column: `#` is live and `.` is
+dead. Retrodiction background colors use the same one-column coordinate map,
+with `#` marking an enabled actual-live overlay.

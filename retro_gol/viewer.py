@@ -406,7 +406,7 @@ def required_terminal_size(N: int) -> tuple[int, int]:
     if not isinstance(N, int) or isinstance(N, bool) or N < 3:
         raise ValueError(f"N must be an integer >=3; observed N={N!r}")
     required_rows = N + 7
-    required_columns = max(2 * N + 2, MINIMUM_INTERFACE_COLUMNS)
+    required_columns = max(N + 2, MINIMUM_INTERFACE_COLUMNS)
     return required_rows, required_columns
 
 
@@ -504,17 +504,17 @@ def _draw_actual_board(
     first_row: int,
 ) -> None:
     N = x_t.shape[0]
-    window.addstr(first_row, 0, "+" + "-" * (2 * N) + "+")
+    window.addstr(first_row, 0, "+" + "-" * N + "+")
     for row in range(N):
         screen_row = first_row + row + 1
         window.addstr(screen_row, 0, "|")
         for column in range(N):
             if x_t[row, column]:
-                window.addstr(screen_row, 1 + 2 * column, "##", curses.A_BOLD)
+                window.addstr(screen_row, 1 + column, "#", curses.A_BOLD)
             else:
-                window.addstr(screen_row, 1 + 2 * column, "..", curses.A_DIM)
-        window.addstr(screen_row, 2 * N + 1, "|")
-    window.addstr(first_row + N + 1, 0, "+" + "-" * (2 * N) + "+")
+                window.addstr(screen_row, 1 + column, ".", curses.A_DIM)
+        window.addstr(screen_row, N + 1, "|")
+    window.addstr(first_row + N + 1, 0, "+" + "-" * N + "+")
 
 
 def _draw_retro_board(
@@ -524,16 +524,16 @@ def _draw_retro_board(
     first_row: int,
 ) -> None:
     N = p_live.shape[0]
-    window.addstr(first_row, 0, "+" + "-" * (2 * N) + "+")
+    window.addstr(first_row, 0, "+" + "-" * N + "+")
     for row in range(N):
         screen_row = first_row + row + 1
         window.addstr(screen_row, 0, "|")
         for column in range(N):
             color = curses.color_pair(probability_band(float(p_live[row, column])))
-            token = "##" if actual is not None and actual[row, column] else "  "
-            window.addstr(screen_row, 1 + 2 * column, token, color | curses.A_BOLD)
-        window.addstr(screen_row, 2 * N + 1, "|")
-    window.addstr(first_row + N + 1, 0, "+" + "-" * (2 * N) + "+")
+            token = "#" if actual is not None and actual[row, column] else " "
+            window.addstr(screen_row, 1 + column, token, color | curses.A_BOLD)
+        window.addstr(screen_row, N + 1, "|")
+    window.addstr(first_row + N + 1, 0, "+" + "-" * N + "+")
 
 
 def _nearest_retrodiction_position(
@@ -605,7 +605,7 @@ def _viewer_loop(
             _write_line(window, 0, header, columns, curses.A_BOLD)
             _write_line(window, 1, details, columns)
             _draw_actual_board(window, x_t, 2)
-            legend = "actual history: ## live | .. dead"
+            legend = "actual history: # live | . dead"
             count = trajectory.transition_count + 1
         else:
             if retrodictions is None:
@@ -625,7 +625,7 @@ def _viewer_loop(
             _write_line(window, 0, header, columns, curses.A_BOLD)
             _write_line(window, 1, details, columns)
             _draw_retro_board(window, p_live, actual, 2)
-            legend = "P(live): red low | yellow middle | green high | overlay ## live"
+            legend = "P(live): red low | yellow middle | green high | overlay # live"
             count = retrodictions.transition_index.size
 
         footer_row = trajectory.N + 4

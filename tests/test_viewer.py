@@ -2,6 +2,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,8 @@ from retro_gol.viewer import (
     PAIR_LOW,
     PAIR_MIDDLE,
     _check_terminal_size,
+    _draw_actual_board,
+    _draw_retro_board,
     _nearest_retrodiction_position,
     chronological_state_indices,
     initial_view,
@@ -247,6 +250,7 @@ class ViewerTests(unittest.TestCase):
     def test_terminal_size_and_probability_bands_are_explicit(self) -> None:
         self.assertEqual(required_terminal_size(10), (17, 74))
         self.assertEqual(required_terminal_size(32), (39, 74))
+        self.assertEqual(required_terminal_size(80), (87, 82))
         self.assertEqual(probability_band(0.0), PAIR_LOW)
         self.assertEqual(probability_band(1.0 / 3.0), PAIR_MIDDLE)
         self.assertEqual(probability_band(2.0 / 3.0), PAIR_HIGH)
@@ -274,6 +278,56 @@ class ViewerTests(unittest.TestCase):
             "required_columns=74.*observed_columns=73",
         ):
             _check_terminal_size(Screen(17, 73), N=10)
+
+        _check_terminal_size(Screen(87, 82), N=80)
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "required_columns=82.*observed_columns=81",
+        ):
+            _check_terminal_size(Screen(87, 81), N=80)
+
+    def test_board_renderers_use_one_terminal_column_per_cell(self) -> None:
+        class Screen:
+            def __init__(self) -> None:
+                self.calls: list[tuple[object, ...]] = []
+
+            def addstr(self, *arguments: object) -> None:
+                self.calls.append(arguments)
+
+        actual = np.asarray(
+            [
+                [True, False, True],
+                [False, True, False],
+                [True, False, False],
+            ],
+            dtype=np.bool_,
+        )
+        actual_screen = Screen()
+        _draw_actual_board(actual_screen, actual, first_row=2)
+        actual_text = [call[:3] for call in actual_screen.calls]
+        self.assertIn((2, 0, "+---+"), actual_text)
+        self.assertIn((3, 1, "#"), actual_text)
+        self.assertIn((3, 2, "."), actual_text)
+        self.assertIn((3, 3, "#"), actual_text)
+        self.assertIn((3, 4, "|"), actual_text)
+
+        retro_screen = Screen()
+        with unittest.mock.patch(
+            "retro_gol.viewer.curses.color_pair",
+            return_value=0,
+        ):
+            _draw_retro_board(
+                retro_screen,
+                np.full((3, 3), 0.5, dtype=np.float32),
+                actual,
+                first_row=2,
+            )
+        retro_text = [call[:3] for call in retro_screen.calls]
+        self.assertIn((2, 0, "+---+"), retro_text)
+        self.assertIn((3, 1, "#"), retro_text)
+        self.assertIn((3, 2, " "), retro_text)
+        self.assertIn((3, 3, "#"), retro_text)
+        self.assertIn((3, 4, "|"), retro_text)
 
 
 if __name__ == "__main__":

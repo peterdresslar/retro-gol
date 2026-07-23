@@ -268,13 +268,20 @@ Decision statuses:
   index, and displays the selected index explicitly. `--retro-only` requires an
   explicit retrodiction artifact, disables that truth overlay, and locks the
   viewer to the retrodiction layer. A terminal that cannot display the complete
-  \(N\)-by-\(N\) board at two columns per cell, the controls, or the required
-  colors is an explicit startup failure.
+  \(N\)-by-\(N\) board at one terminal column per cell, the controls, or the
+  required colors is an explicit startup failure. The actual-history glyphs
+  are `#` for live and `.` for dead; each glyph's terminal column is the cell's
+  exact board column. Retrodiction colors likewise occupy exactly one terminal
+  column, with `#` as the optional actual-live overlay. Terminal character
+  dimensions are controlled by the terminal emulator and are not stretched by
+  the viewer.
 - **Evidence:** The console viewer was requested for bidirectional trajectory
   inspection, speed-controlled playback, per-cell retrodiction colors, and an
   optional actual-history overlay. Current raw `.npz` files intentionally keep
   scientific metadata in the run manifest, and recurrent trajectories omit a
-  duplicate closing state.
+  duplicate closing state. A one-character-per-cell display was subsequently
+  selected because duplicating glyphs across two terminal columns obscured
+  diagnostic column positions.
 - **Alternatives considered:** Inferring `N` from a filename or packed byte
   width; running whole-run verification before viewing one trajectory;
   treating marginal probabilities as a binary predecessor; or evolving them
