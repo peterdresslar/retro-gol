@@ -494,7 +494,8 @@ Decision statuses:
 ## RG-STORE-001 — Scratch, private mirror, manifests, and recovery
 
 - **Status:** Accepted architecture; automatic retry clause superseded by
-  RG-STORE-002; exact Sol paths and private remote prefix are Pending
+  RG-STORE-002; remote-base selection and source-control policy superseded by
+  RG-STORE-003; exact production Sol paths are Pending
 - **Decision:** Adapt the Hybrid Signal Lab router-experiment pattern:
 
   - separate checkout, scratch data, run, log, and cache roots;
@@ -515,8 +516,8 @@ Decision statuses:
   - preflight `hf`, authentication, and destination access before expensive
     work; a required-backup failure is not a successful no-op;
   - inspect an allowlisted `hf buckets sync --dry-run` plan before applying it,
-    never use remote deletion during routine backup, and retry transient
-    failures with bounded backoff;
+    and never use remote deletion during routine backup; RG-STORE-002 governs
+    the single-attempt failure behavior;
   - sync only finalized artifacts and logs, then verify the remote manifest and
     checksums before marking required backup complete;
   - keep credentials, caches, temporary files, and incomplete output out of the
@@ -524,8 +525,10 @@ Decision statuses:
   - keep the scratch mirror private and distinct from any later curated or
     public dataset. Public promotion requires explicit approval.
 
-  The remote base must be supplied outside version control. No production run
-  may silently default to a public destination or to an unrelated project's
+  The original version of this decision left the remote base outside version
+  control. RG-STORE-003 supersedes that clause: the destination is a tracked
+  launch input, and only credentials remain external. No production run may
+  silently default to a public destination or to an unrelated project's
   prefix.
 - **Evidence:** The detailed Hybrid Signal Lab scratch-to-private-HF workflow
   was selected as the operational model. Its useful boundaries are retained,
@@ -555,6 +558,56 @@ Decision statuses:
   completion time and high to auditability.
 - **Affected configurations:** Backup command, attempt log, finalizer, and run
   completion status.
+
+## RG-STORE-003 — Private Hugging Face destination for future runs
+
+- **Status:** Accepted for future versioned Sol runs; not applied
+  retroactively to RG-CAL-001
+- **Decision:** Use the dedicated private Hugging Face Bucket
+  `hf://buckets/peterdresslar/retro-gol-private` as the remote base for future
+  calibration and experiment artifacts. Each zero-argument parent launch
+  script must visibly fix a run-specific destination below that base, the
+  repository-local executable `.venv/bin/hf`, and the backup mode. The
+  destination is tracked configuration; credentials are not. Authentication
+  uses the existing Hugging Face CLI credential store prepared outside the
+  repository, and preflight must require `hf auth whoami --format json` to
+  identify `peterdresslar` and
+  `hf buckets info peterdresslar/retro-gol-private --format json` to report a
+  private accessible bucket before expensive compute begins.
+
+  The repository directly pins `huggingface-hub==1.24.0`, which supplies the
+  `hf` executable. Environments are prepared with `uv sync --frozen` before
+  submission; a compute or backup job must never install or update the client.
+  Future backup workers sync only a finalized, checksummed export directory.
+  They must write a plan with `hf buckets sync SOURCE DEST --plan PLAN`, inspect
+  that every planned operation is allowlisted beneath the exact destination,
+  and apply that same plan with `hf buckets sync --apply PLAN`. Routine sync
+  never uses `--delete` and makes the single attempt required by RG-STORE-002.
+  Remote completion requires an independently checked remote file manifest and
+  SHA-256 coverage; compute outcome and backup outcome remain separate records.
+
+  The completed `sol-cpu-timing-v1` calibration remains explicitly
+  `backup_mode=none_sol_calibration` and is not retroactively uploaded or
+  relabeled. Automatic sync begins only in a new tracked script/configuration
+  version and run ID. A dependent post-compute backup job is preferred when
+  closed Slurm logs are part of the export; its exact dependency and artifact
+  allowlist must be fixed in that future parent script.
+- **Evidence:** A dedicated private bucket was created under the authenticated
+  `peterdresslar` account, and later-run automatic HF sync was selected while
+  the completed first calibration will instead be reviewed from files pasted
+  directly into this discussion. Pinning the client in the project environment
+  and tracking the destination improve reproduction over job-time installation
+  or command-line destination overrides.
+- **Alternatives considered:** Retroactively uploading RG-CAL-001; reusing the
+  unrelated Hybrid Signal Lab bucket; installing the client with `uvx` inside
+  each job; or leaving the destination as an untracked shell input. Each would
+  conflict with the immutable-run record, project separation, prepared-
+  environment rule, or zero-argument launch contract.
+- **Likely sensitivity:** None to Game-of-Life dynamics; high to provenance,
+  recoverability, and operational completion.
+- **Affected configurations:** Project dependency lock, future Sol launchers,
+  backup workers, run manifests, remote verification records, and restore
+  instructions.
 
 ## RG-CTRL-001 — Safeword and terminal finalization
 
@@ -600,7 +653,8 @@ The following are intentionally unresolved rather than silently assumed:
 - production Sol account, partition/QoS, maximum wall time, array limits, and
   fair-share concurrency; the RG-CAL-001 warmup selection does not resolve
   these production settings;
-- exact scratch roots and approved private Hugging Face Bucket prefix;
+- exact production scratch roots; RG-STORE-003 fixes the private Hugging Face
+  Bucket base, while each future parent must fix its run-specific prefix;
 - the numeric CPU-hour/GPU-hour ceiling and calendar window for the week-scale
   campaign;
 - CPU, GPU, or mixed production execution, determined by RG-SCALE-001.

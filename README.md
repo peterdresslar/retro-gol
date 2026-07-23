@@ -42,6 +42,9 @@ The first fixed-workload Sol CPU calibration is documented in
 [`calibrations/README.md`](calibrations/README.md). Its submission wrapper runs
 the tests and materializes the immutable plan before calling `sbatch`; generated
 artifacts and Slurm logs remain under an explicit Sol scratch root.
+Calibration v1 performs no upload. Future versioned Sol runs will use the
+tracked private base `hf://buckets/peterdresslar/retro-gol-private` after an
+explicit authentication, privacy, sync-plan, and checksum preflight.
 
 ## Console trajectory viewer
 
