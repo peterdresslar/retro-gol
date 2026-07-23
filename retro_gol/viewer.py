@@ -406,7 +406,7 @@ def required_terminal_size(N: int) -> tuple[int, int]:
     if not isinstance(N, int) or isinstance(N, bool) or N < 3:
         raise ValueError(f"N must be an integer >=3; observed N={N!r}")
     required_rows = N + 7
-    required_columns = max(N + 2, MINIMUM_INTERFACE_COLUMNS)
+    required_columns = max(2 * N + 1, MINIMUM_INTERFACE_COLUMNS)
     return required_rows, required_columns
 
 
@@ -504,17 +504,21 @@ def _draw_actual_board(
     first_row: int,
 ) -> None:
     N = x_t.shape[0]
-    window.addstr(first_row, 0, "+" + "-" * N + "+")
+    board_width = 2 * N - 1
+    window.addstr(first_row, 0, "+" + "-" * board_width + "+")
     for row in range(N):
         screen_row = first_row + row + 1
-        window.addstr(screen_row, 0, "|")
+        window.addstr(screen_row, 0, "|" + " " * board_width + "|")
         for column in range(N):
             if x_t[row, column]:
-                window.addstr(screen_row, 1 + column, "#", curses.A_BOLD)
+                window.addstr(screen_row, 1 + 2 * column, "#", curses.A_BOLD)
             else:
-                window.addstr(screen_row, 1 + column, ".", curses.A_DIM)
-        window.addstr(screen_row, N + 1, "|")
-    window.addstr(first_row + N + 1, 0, "+" + "-" * N + "+")
+                window.addstr(screen_row, 1 + 2 * column, ".", curses.A_DIM)
+    window.addstr(
+        first_row + N + 1,
+        0,
+        "+" + "-" * board_width + "+",
+    )
 
 
 def _draw_retro_board(
@@ -524,16 +528,20 @@ def _draw_retro_board(
     first_row: int,
 ) -> None:
     N = p_live.shape[0]
-    window.addstr(first_row, 0, "+" + "-" * N + "+")
+    board_width = 2 * N - 1
+    window.addstr(first_row, 0, "+" + "-" * board_width + "+")
     for row in range(N):
         screen_row = first_row + row + 1
-        window.addstr(screen_row, 0, "|")
+        window.addstr(screen_row, 0, "|" + " " * board_width + "|")
         for column in range(N):
             color = curses.color_pair(probability_band(float(p_live[row, column])))
             token = "#" if actual is not None and actual[row, column] else " "
-            window.addstr(screen_row, 1 + column, token, color | curses.A_BOLD)
-        window.addstr(screen_row, N + 1, "|")
-    window.addstr(first_row + N + 1, 0, "+" + "-" * N + "+")
+            window.addstr(screen_row, 1 + 2 * column, token, color | curses.A_BOLD)
+    window.addstr(
+        first_row + N + 1,
+        0,
+        "+" + "-" * board_width + "+",
+    )
 
 
 def _nearest_retrodiction_position(

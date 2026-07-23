@@ -250,7 +250,7 @@ class ViewerTests(unittest.TestCase):
     def test_terminal_size_and_probability_bands_are_explicit(self) -> None:
         self.assertEqual(required_terminal_size(10), (17, 74))
         self.assertEqual(required_terminal_size(32), (39, 74))
-        self.assertEqual(required_terminal_size(80), (87, 82))
+        self.assertEqual(required_terminal_size(80), (87, 161))
         self.assertEqual(probability_band(0.0), PAIR_LOW)
         self.assertEqual(probability_band(1.0 / 3.0), PAIR_MIDDLE)
         self.assertEqual(probability_band(2.0 / 3.0), PAIR_HIGH)
@@ -279,12 +279,12 @@ class ViewerTests(unittest.TestCase):
         ):
             _check_terminal_size(Screen(17, 73), N=10)
 
-        _check_terminal_size(Screen(87, 82), N=80)
+        _check_terminal_size(Screen(87, 161), N=80)
         with self.assertRaisesRegex(
             RuntimeError,
-            "required_columns=82.*observed_columns=81",
+            "required_columns=161.*observed_columns=160",
         ):
-            _check_terminal_size(Screen(87, 81), N=80)
+            _check_terminal_size(Screen(87, 160), N=80)
 
     def test_board_renderers_use_one_terminal_column_per_cell(self) -> None:
         class Screen:
@@ -305,11 +305,11 @@ class ViewerTests(unittest.TestCase):
         actual_screen = Screen()
         _draw_actual_board(actual_screen, actual, first_row=2)
         actual_text = [call[:3] for call in actual_screen.calls]
-        self.assertIn((2, 0, "+---+"), actual_text)
+        self.assertIn((2, 0, "+-----+"), actual_text)
+        self.assertIn((3, 0, "|     |"), actual_text)
         self.assertIn((3, 1, "#"), actual_text)
-        self.assertIn((3, 2, "."), actual_text)
-        self.assertIn((3, 3, "#"), actual_text)
-        self.assertIn((3, 4, "|"), actual_text)
+        self.assertIn((3, 3, "."), actual_text)
+        self.assertIn((3, 5, "#"), actual_text)
 
         retro_screen = Screen()
         with unittest.mock.patch(
@@ -323,11 +323,11 @@ class ViewerTests(unittest.TestCase):
                 first_row=2,
             )
         retro_text = [call[:3] for call in retro_screen.calls]
-        self.assertIn((2, 0, "+---+"), retro_text)
+        self.assertIn((2, 0, "+-----+"), retro_text)
+        self.assertIn((3, 0, "|     |"), retro_text)
         self.assertIn((3, 1, "#"), retro_text)
-        self.assertIn((3, 2, " "), retro_text)
-        self.assertIn((3, 3, "#"), retro_text)
-        self.assertIn((3, 4, "|"), retro_text)
+        self.assertIn((3, 3, " "), retro_text)
+        self.assertIn((3, 5, "#"), retro_text)
 
 
 if __name__ == "__main__":
