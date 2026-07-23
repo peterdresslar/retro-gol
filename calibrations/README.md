@@ -147,45 +147,5 @@ verifies every SHA-256. Success requires:
 This is the final planned generation-count calibration before choosing the
 worker count and deadline policy for an overnight run.
 
-## RG-CAL-004 twelve-hour full-retention wall-time tester
-
-The scaling result selects eight one-thread CPU workers. The first wall-time
-tester keeps every trajectory artifact and gives generation and transfer
-different allocations. The generation job requests `public/public` for
-12:20:00, stops scientific generation at an explicit 43,200-second deadline,
-and receives a scheduler warning 900 seconds before its allocation ends. The
-dependent finalizer requests four CPUs and 16 GiB for four hours to aggregate,
-checksum, export, upload, and fresh-download-verify the full retained run.
-Because the run, export, and fresh remote-copy verification coexist temporarily,
-the submitter requires approximately 230 GiB of free space below the configured
-scratch root before it allocates the compute job.
-
-First materialize the compact deterministic stream plan:
-
-```sh
-bash calibrations/plan_sol_cpu_overnight_v1.sh
-```
-
-Review the plan and the `RG-CAL-004` decision in `METHODS.md`, then submit the
-generation job and its dependent private-backup job:
-
-```sh
-bash calibrations/submit_sol_cpu_overnight_v1.sh
-```
-
-The submitter accepts no arguments or `SBATCH_*` overrides. It requires the
-completed RG-CAL-003 backup smoke, checks the prepared `.venv/bin/hf` client
-and empty private destination, and records all resource, deadline, plan, code,
-and remote-prefix settings under:
-
-```text
-/scratch/pdressla/retro-gol/calibrations/runs/sol-cpu-overnight-v1/run-attempt-001/
-```
-
-The generation job prints the sticky control path and commands for `PAUSE` and
-`STOP`. Monitor all user jobs with `squeue -u pdressla --iterate=10`. Successful
-full retention and independent remote verification require:
-
-```text
-/scratch/pdressla/retro-gol/calibrations/runs/sol-cpu-overnight-v1/run-attempt-001/BACKUP_COMPLETE
-```
+The next full-retention generation tester is maintained under
+[`generations/`](../generations/), not in this calibration directory.

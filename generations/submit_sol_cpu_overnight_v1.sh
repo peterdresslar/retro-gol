@@ -17,11 +17,11 @@ finalizer_script="$script_dir/sol_cpu_overnight_finalize_v1.slurm"
 run_id=sol-cpu-overnight-v1
 plan_id=sol-cpu-overnight-v1-plan-001
 attempt_id=run-attempt-001
-scratch_root=/scratch/pdressla/retro-gol/calibrations
+scratch_root=/scratch/pdressla/retro-gol/generations
 run_root="$scratch_root/runs/$run_id/$attempt_id"
 log_root="$scratch_root/logs/$run_id/$attempt_id"
 plan_dir="$scratch_root/plans/$plan_id"
-remote_uri="hf://buckets/peterdresslar/retro-gol-private/overnight/$run_id/backup-attempt-001/export"
+remote_uri="hf://buckets/peterdresslar/retro-gol-private/generations/$run_id/backup-attempt-001/export"
 smoke_run_root="$scratch_root/runs/sol-private-backup-smoke-v1"
 slurm_account=grp_bdaniel6
 compute_partition=public
@@ -59,7 +59,7 @@ dirty_paths=$(git status --porcelain --untracked-files=normal)
 revision=$(git rev-parse --verify HEAD)
 checksum_record=$(sha256sum -- "$config_path")
 config_sha256=${checksum_record%% *}
-[[ -d "$plan_dir" && -f "$plan_dir/plan.json" && -f "$plan_dir/manifest.json" && -f "$plan_dir/PLAN_COMPLETE" ]] || fail "overnight plan is missing or incomplete; run bash calibrations/plan_sol_cpu_overnight_v1.sh first; expected=$plan_dir"
+[[ -d "$plan_dir" && -f "$plan_dir/plan.json" && -f "$plan_dir/manifest.json" && -f "$plan_dir/PLAN_COMPLETE" ]] || fail "overnight plan is missing or incomplete; run bash generations/plan_sol_cpu_overnight_v1.sh first; expected=$plan_dir"
 checksum_record=$(sha256sum -- "$plan_dir/plan.json")
 plan_sha256=${checksum_record%% *}
 

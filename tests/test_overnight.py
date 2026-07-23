@@ -17,7 +17,7 @@ from retro_gol.overnight import (
 class OvernightTests(unittest.TestCase):
     def _config(self, root: Path) -> Path:
         config = json.loads(
-            Path("calibrations/sol_cpu_overnight_v1.json").read_text(encoding="utf-8")
+            Path("generations/sol_cpu_overnight_v1.json").read_text(encoding="utf-8")
         )
         config["run_id"] = "overnight-test"
         config["trajectory_capacity_per_stratum"] = 2

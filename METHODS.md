@@ -644,7 +644,7 @@ Decision statuses:
   backup scripts, `retro_gol.generate`, `retro_gol.backup`, and the RG-CAL-002
   submission gate.
 
-## RG-CAL-004 — Twelve-hour full-retention CPU wall-time tester
+## RG-GEN-001 — Twelve-hour full-retention CPU generation tester
 
 - **Status:** Ready for execution after local smoke; this is the wall-time and
   storage probe in RG-SCALE-001, not authorization of the week-scale corpus.
@@ -694,7 +694,7 @@ Decision statuses:
   transfer bandwidth, and finalizer wall time; none to the validity of a
   worker-validated B3/S23 transition.
 - **Affected configurations:**
-  `calibrations/sol_cpu_overnight_v1.json`, its compact planner, eight-worker
+  `generations/sol_cpu_overnight_v1.json`, its compact planner, eight-worker
   Slurm launcher, atomic wall-time worker, finalizer, full-retention export,
   and the private remote prefix.
 
