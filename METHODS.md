@@ -543,10 +543,10 @@ Decision statuses:
   separate zero-argument scripts so the complete materialized plan can be
   reviewed before allocation. The pre-gate plan-only artifact was never
   launched and is superseded without deletion by
-  `sol-cpu-scaling-v1-plan-002`, because the accepted private-backup smoke
-  changed the tracked source snapshot and Git revision. Submission refuses
-  revision, configuration, lock, plan, environment, or path drift. The
-  required private destination is
+  `sol-cpu-scaling-v1-plan-003`. Plan 002 was also never launched: its
+  submitter failed during a path-validation preflight and was corrected in a
+  new tracked revision. Submission refuses revision, configuration, lock,
+  plan, environment, or path drift. The required private destination is
   `hf://buckets/peterdresslar/retro-gol-private/calibrations/sol-cpu-scaling-v1/backup-attempt-001/export`.
   The repository-pinned `.venv/bin/hf` 1.24.0 client, authenticated identity,
   private bucket, and absent attempt prefix are checked before compute and

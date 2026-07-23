@@ -125,10 +125,10 @@ is enabled. First materialize the current immutable plan:
 bash calibrations/plan_sol_cpu_scaling_v1.sh
 ```
 
-This writes `sol-cpu-scaling-v1-plan-002`. The earlier pre-gate plan remains
-untouched but is intentionally not accepted for submission because the source
-revision changed while implementing and validating the private-backup smoke.
-After reviewing the new plan, submit the complete calibration:
+This writes `sol-cpu-scaling-v1-plan-003`. The earlier plans remain untouched.
+Plan 002 was never launched: its submitter failed during path validation before
+creating a run attempt, and the correction changed the tracked revision. After
+reviewing the new plan, submit the complete calibration:
 
 ```sh
 bash calibrations/submit_sol_cpu_scaling_v1.sh

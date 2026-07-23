@@ -25,7 +25,7 @@ worker_script="$script_dir/sol_cpu_scaling_v1.slurm"
 finalizer_script="$script_dir/sol_cpu_scaling_finalize_v1.slurm"
 
 run_id=sol-cpu-scaling-v1
-plan_id=sol-cpu-scaling-v1-plan-002
+plan_id=sol-cpu-scaling-v1-plan-003
 attempt_id=run-attempt-001
 scratch_root=/scratch/pdressla/retro-gol/calibrations
 remote_uri="hf://buckets/peterdresslar/retro-gol-private/calibrations/$run_id/backup-attempt-001/export"
@@ -59,9 +59,11 @@ for required_file in \
     [[ -f "$required_file" ]] || \
         fail "required tracked scaling file is missing; expected=$required_file"
 done
-case "$repo_root $python_path $scratch_root" in
-    *[[:space:]]*) fail "scaling paths must not contain whitespace; repo=$repo_root scratch=$scratch_root" ;;
-esac
+for path in "$repo_root" "$python_path" "$scratch_root"; do
+    case "$path" in
+        *[[:space:]]*) fail "scaling path must not contain whitespace; observed=$path" ;;
+    esac
+done
 
 cd -- "$repo_root"
 dirty_paths=$(git status --porcelain --untracked-files=normal)
